@@ -2,7 +2,7 @@ name: Fetch TGVmax CSV daily
 
 on:
   schedule:
-    - cron: "2 13 * * *"
+    - cron: "2 13 * * *"  # 13:02 UTC -> 15:02 Paris (été)
   workflow_dispatch: {}
 
 jobs:
@@ -13,6 +13,9 @@ jobs:
       EXPORT_URL: "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/exports/csv?select=*&order_by=date&limit=100000"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false  # we'll push with our PAT, not GITHUB_TOKEN
 
       - name: Make dirs
         run: mkdir -p snapshots
@@ -25,10 +28,16 @@ jobs:
           done
           test -s "snapshots/tgvmax_${TS}.csv"
 
-      - name: Commit if changed
+      - name: Configure git
         run: |
           git config user.name "tgvmax-bot"
           git config user.email "tgvmax-bot@users.noreply.github.com"
-          git add snapshots/
-          git commit -m "snapshot: ${TZ} $(date '+%Y-%m-%d %H:%M:%S %Z')" || echo "No changes"
-          git push
+
+      - name: Push changes with PAT
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}   # <-- create this secret with a PAT (scope: repo)
+        run: |
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
+          git add snapshots/tgvmax_*.csv
+          git commit -m "snapshot: $(TZ=Europe/Paris date '+%Y-%m-%d %H:%M:%S %Z')" || exit 0
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
