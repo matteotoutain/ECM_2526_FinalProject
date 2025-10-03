@@ -2,7 +2,7 @@ name: Fetch TGVmax CSV daily
 
 on:
   schedule:
-    - cron: "35 6 * * *"   # 06:35 UTC ≈ 08:35 Paris (selon l'heure d'été)
+    - cron: "2 13 * * *"
   workflow_dispatch: {}
 
 jobs:
