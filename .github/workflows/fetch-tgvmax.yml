@@ -2,7 +2,7 @@ name: Fetch TGVmax CSV daily
 
 on:
   schedule:
-    - cron: "2 13 * * *"  # 13:02 UTC -> 15:02 Paris (été)
+    - cron: "0 13 * * *"  # 13:02 UTC -> 15:02 Paris (été)
   workflow_dispatch: {}
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Europe/Paris
-      EXPORT_URL: "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/exports/csv?select=*&order_by=date&limit=100000"
+      EXPORT_URL: "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/exports/csv"
     steps:
       - uses: actions/checkout@v4
         with:
