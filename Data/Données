@@ -1,1 +1,9 @@
-Ici se trouverons les données du projet
+Ici se trouverons les données, les sources des données et la présentation des données.
+csv, json, proto, xbrl
+
+Pour exemples, on a souvent des Packages déjà existants :
+- YAHOO FINANCE
+- Quandl
+- Alpha Vantage (Json and Excel via calls API)
+- EOD Historical Data
+- KAGGLE +++
