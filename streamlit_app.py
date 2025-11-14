@@ -47,7 +47,7 @@ def load_model(data_dir: str) -> TgvMaxModel:
 
 st.sidebar.header("Configuration des données")
 
-default_data_dir = pathlib.Path(__file__).parent / "data"
+default_data_dir = pathlib.Path(__file__).parent / "snapshots"
 data_dir_str = st.sidebar.text_input(
     "Dossier contenant les fichiers tgvmax_*.csv",
     value=str(default_data_dir),
