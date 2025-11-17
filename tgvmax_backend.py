@@ -2,7 +2,9 @@
 tgvmax_backend.py
 Backend pour la prévision d'ouverture TGVmax à partir des snapshots journaliers.
 
-À placer à la racine de ton projet (ou dans un dossier backend/).
+Version 2 :
+- Ajout des probabilités par trajet (Origine, Destination)
+- Stockage de la liste des gares pour le front
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ import os
 import glob
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import pandas as pd
@@ -35,12 +37,16 @@ DEFAULT_PATTERN = "tgvmax_*.csv"
 @dataclass
 class TgvMaxModel:
     """
-    Objet léger qui contient :
-      - le DataFrame brut filtré (trains)
-      - la table proba globale en fonction de delta_days
+    Objet qui contient :
+      - trains          : le DataFrame filtré
+      - proba_by_delta  : proba globale vs delta_days
+      - proba_by_od     : proba par (origine, destination, delta_days)
+      - stations        : liste dédupliquée de gares (origine + destination)
     """
     trains: pd.DataFrame
     proba_by_delta: pd.Series
+    proba_by_od: pd.Series
+    stations: List[str]
 
 
 # =====================
@@ -108,6 +114,7 @@ def filter_trains_for_model(trains_raw: pd.DataFrame) -> pd.DataFrame:
     mask_entity = (
         df[COL_ENTITY].str.contains("JCNORDSUD", case=False, na=False)
         | df[COL_ENTITY].str.contains("JCSUDNORD", case=False, na=False)
+        | df[COL_ENTITY].str.contains("PAPROVENCE", case=False, na=False)
     )
     df = df[mask_entity].copy()
 
@@ -140,6 +147,39 @@ def compute_global_proba_by_delta(trains: pd.DataFrame) -> pd.Series:
     return proba_by_delta
 
 
+def compute_proba_by_od(trains: pd.DataFrame) -> pd.Series:
+    """
+    Calcule la probabilité empirique de disponibilité TGVmax
+    par (origine, destination, delta_days).
+    Retourne une Series avec un MultiIndex (origine, destination, delta_days).
+    """
+    grouped = (
+        trains
+        .groupby([COL_ORIGIN, COL_DEST, "delta_days"])["tgvmax_available"]
+        .mean()
+    )
+    grouped.sort_index(inplace=True)
+    return grouped
+
+
+def extract_stations(trains: pd.DataFrame) -> List[str]:
+    """
+    Extrait la liste dédupliquée des gares (Origine + Destination).
+    """
+    series_stations = pd.concat([trains[COL_ORIGIN], trains[COL_DEST]], axis=0)
+    stations = (
+        series_stations.dropna()
+        .astype(str)
+        .str.strip()
+        .replace({"": None})
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    stations = sorted(stations)
+    return stations
+
+
 # =====================
 # Construction du modèle
 # =====================
@@ -150,28 +190,70 @@ def build_model(data_dir: str) -> TgvMaxModel:
       1. chargement de tous les snapshots tgvmax_*.csv
       2. filtrage + features (delta_days, tgvmax_available)
       3. calcul de la proba globale par delta_days
+      4. calcul de la proba par (origine, destination, delta_days)
+      5. extraction de la liste de gares
     """
     trains_raw = load_all_snapshots(data_dir=data_dir, pattern=DEFAULT_PATTERN)
     trains = filter_trains_for_model(trains_raw)
-    proba_by_delta = compute_global_proba_by_delta(trains)
 
-    return TgvMaxModel(trains=trains, proba_by_delta=proba_by_delta)
+    proba_by_delta = compute_global_proba_by_delta(trains)
+    proba_by_od = compute_proba_by_od(trains)
+    stations = extract_stations(trains)
+
+    return TgvMaxModel(
+        trains=trains,
+        proba_by_delta=proba_by_delta,
+        proba_by_od=proba_by_od,
+        stations=stations,
+    )
 
 
 # =====================
 # Fonction de prévision
 # =====================
 
+def _get_daily_probability(
+    model: TgvMaxModel,
+    delta: int,
+    origin: Optional[str],
+    destination: Optional[str],
+) -> float:
+    """
+    Récupère la proba pour un (delta_days) donné :
+      - d'abord spécifique au trajet (origine, destination, delta)
+      - sinon fallback sur la proba globale proba_by_delta
+      - sinon 0.0
+    """
+    p = None
+
+    # 1) tentative par trajet
+    if origin is not None and destination is not None:
+        try:
+            p = float(model.proba_by_od.loc[(origin, destination, delta)])
+        except KeyError:
+            p = None
+
+    # 2) fallback global
+    if p is None:
+        p = float(model.proba_by_delta.get(delta, 0.0))
+
+    # 3) clamp
+    p = max(0.0, min(1.0, p))
+    return p
+
+
 def forecast_opening_curve(
     model: TgvMaxModel,
     departure_date: date,
     today: Optional[date] = None,
+    origin: Optional[str] = None,
+    destination: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Construit la courbe de probabilité d'ouverture entre (today) et (departure_date - 1).
 
-    Hypothèse : on utilise une proba globale P(ouvert) en fonction de delta_days,
-    basée sur les observations historiques.
+    Utilise si possible la proba par trajet (origine, destination, delta_days),
+    sinon retombe sur la proba globale.
 
     Retourne un DataFrame avec colonnes :
       - date             : date calendaire
@@ -184,21 +266,23 @@ def forecast_opening_curve(
     if departure_date <= today:
         raise ValueError("La date de départ doit être dans le futur.")
 
-    proba_by_delta = model.proba_by_delta
-
-    max_delta_known = int(proba_by_delta.index.max())
+    max_delta_known = int(model.proba_by_delta.index.max())
     # Si le départ est très lointain, on commence la courbe à departure_date - max_delta_known.
     start_date = max(today, departure_date - timedelta(days=max_delta_known))
 
     nb_days = (departure_date - start_date).days
     dates = [start_date + timedelta(days=i) for i in range(nb_days)]
 
-    # Proba "ouverte ce jour-là" (daily_p) = P(TGVmax disponible pour ce delta_days)
+    # Proba "ouverte ce jour-là" (daily_p) en fonction de delta_days
     daily_p = []
     for d in dates:
         delta = (departure_date - d).days
-        p = float(proba_by_delta.get(delta, 0.0))
-        p = max(0.0, min(1.0, p))
+        p = _get_daily_probability(
+            model=model,
+            delta=delta,
+            origin=origin,
+            destination=destination,
+        )
         daily_p.append(p)
 
     # On passe à une interprétation "événement d'ouverture" + cumul.
@@ -207,8 +291,6 @@ def forecast_opening_curve(
     prob_not_open_yet = 1.0
 
     for p in daily_p:
-        # Approximation : si la résa n'est pas déjà ouverte,
-        # probabilité qu'elle s'ouvre ce jour = p * prob_not_open_yet
         p_new = p * prob_not_open_yet
         prob_open.append(p_new)
         prob_not_open_yet *= (1 - p)
