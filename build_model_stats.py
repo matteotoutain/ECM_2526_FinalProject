@@ -76,6 +76,7 @@ def build_enriched_df(trains_raw: pd.DataFrame) -> pd.DataFrame:
     mask_entity = (
         df[COL_ENTITY].str.contains("JCNORDSUD", case=False, na=False)
         | df[COL_ENTITY].str.contains("JCSUDNORD", case=False, na=False)
+        | df[COL_ENTITY].str.contains("PAPROVENCE", case=False, na=False)
     )
     df = df[mask_entity].copy()
 
