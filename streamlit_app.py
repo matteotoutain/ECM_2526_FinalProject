@@ -35,11 +35,11 @@ st.set_page_config(
 )
 
 # Détection du thème Streamlit pour choisir le bon logo
-theme_base = st.get_option("theme.base") or "dark"
-if theme_base == "dark":
-    logo_path = "whitelogo.png"
-else:
+theme_base = st.get_option("theme.backgroundColor") or "#ffffff"
+if theme_base == "#ffffff":
     logo_path = "blacklogo.png"
+else:
+    logo_path = "whitelogo.png"
 
 # Affichage du logo centré
 col_logo_left, col_logo_center, col_logo_right = st.columns([1, 2, 1])
