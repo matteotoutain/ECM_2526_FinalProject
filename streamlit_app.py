@@ -89,16 +89,7 @@ def get_stats(version: int) -> TgvMaxStats:
 
 try:
     stats = get_stats(MODEL_VERSION)
-    with st.container():
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.success("Statistiques pré-calculées chargées ✅")
-        st.write(
-            f"- Trajets historiques analysés : **{len(stats.proba_od):,} lignes**"
-        )
-        st.write(
-            f"- Gares disponibles dans l’outil : **{len(stats.stations)}**"
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        
 except Exception as e:
     stats = None
     st.error(
@@ -163,7 +154,7 @@ else:
 
     st.caption(
         "MaxCast utilise la distribution historique de disponibilité TGVmax "
-        "en fonction du nombre de jours avant le départ (`delta_days`). "
+        "en fonction du nombre de jours avant le départ. "
         "Lorsque c’est possible, la prévision est spécifique à ton trajet "
         "(origine/destination) ; sinon, le modèle retombe sur une statistique plus globale."
     )
@@ -205,7 +196,6 @@ else:
                 colA, colB, colC = st.columns(3)
 
                 with colA:
-                    st.markdown('<div class="metric-title">Date la plus probable</div>', unsafe_allow_html=True)
                     st.markdown(
                         f'<div class="metric-value">{date_ml.strftime("%d/%m/%Y")}</div>',
                         unsafe_allow_html=True,
@@ -235,7 +225,6 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                st.markdown("</div>", unsafe_allow_html=True)
 
                 # =====================
                 # Graphiques
