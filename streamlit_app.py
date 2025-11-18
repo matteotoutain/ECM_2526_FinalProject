@@ -29,12 +29,42 @@ MODEL_VERSION = 1  # incrémente si tu changes la structure des stats
 # Helpers
 # =====================
 
-def load_image_base64(path: str) -> str:
-    """Lit une image et renvoie une string base64 prête pour un tag <img>."""
+import base64
+
+def load_image_b64(path):
     with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+        return base64.b64encode(f.read()).decode()
 
+white_logo_b64 = load_image_b64("whitelogo.png")
+black_logo_b64 = load_image_b64("blacklogo.png")
 
+st.markdown(
+    f"""
+    <style>
+    .logo-container {{
+        text-align: center;
+        margin-top: 10px;
+        margin-bottom: 15px;
+    }}
+
+    /* Par défaut → clair */
+    .logo-dark {{ display: none; }}
+    .logo-light {{ display: inline-block; }}
+
+    /* Si mode sombre détecté par le navigateur */
+    @media (prefers-color-scheme: dark) {{
+        .logo-dark {{ display: inline-block; }}
+        .logo-light {{ display: none; }}
+    }}
+    </style>
+
+    <div class="logo-container">
+        <img class="logo-light" src="data:image/png;base64,{black_logo_b64}" width="170">
+        <img class="logo-dark" src="data:image/png;base64,{white_logo_b64}" width="170">
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 # =====================
 # Configuration générale
 # =====================
@@ -45,22 +75,11 @@ st.set_page_config(
     layout="centered",
 )
 
-# Choix du logo en fonction du thème de l'APP (config Streamlit)
-app_theme = st.get_option("theme.base") or "dark"  # "light" ou "dark"
-
-if app_theme == "dark":
-    logo_file = "whitelogo.png"
-else:
-    logo_file = "blacklogo.png"
-
 # Logo centré
 col_l, col_c, col_r = st.columns([1, 2, 1])
 with col_c:
     st.image(logo_file, use_column_width=False)
 
-# Charger les deux versions du logo
-black_logo_b64 = load_image_base64("blacklogo.png")
-white_logo_b64 = load_image_base64("whitelogo.png")
 
 # CSS global (logo, titres, cards, footer)
 st.markdown(
@@ -73,16 +92,6 @@ st.markdown(
     .logo-img {{
         width: 180px;
     }}
-    .logo-light {{ display: inline-block; }}
-    .logo-dark {{ display: none; }}
-
-    /* Mode clair explicite */
-    body[data-theme="light"] .logo-light {{ display: inline-block; }}
-    body[data-theme="light"] .logo-dark {{ display: none; }}
-
-    /* Mode sombre explicite */
-    body[data-theme="dark"] .logo-light {{ display: none; }}
-    body[data-theme="dark"] .logo-dark {{ display: inline-block; }}
 
     .main-title {{
         font-size: 2.2rem;
@@ -126,10 +135,6 @@ st.markdown(
     }}
     </style>
 
-    <div class="logo-wrapper">
-        <img src="data:image/png;base64,{black_logo_b64}" class="logo-img logo-light" />
-        <img src="data:image/png;base64,{white_logo_b64}" class="logo-img logo-dark" />
-    </div>
     """,
     unsafe_allow_html=True,
 )
