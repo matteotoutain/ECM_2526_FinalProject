@@ -5,10 +5,11 @@ Version "prod" avec interface utilisateur peaufinée :
 - Utilise uniquement les stats pré-calculées dans ./precomputed.
 - Menus déroulants simples pour Origine / Destination.
 - Aucun trajet sélectionné par défaut.
-- Logo adapté au thème clair/sombre.
+- Logos noir/blanc qui s'adaptent automatiquement au thème clair/sombre.
 - Footer "Made with ❤️ in Centrale Méditerranée".
 """
 
+import base64
 import datetime as dt
 
 import streamlit as st
@@ -25,6 +26,16 @@ MODEL_VERSION = 1  # incrémente si tu changes la structure des stats
 
 
 # =====================
+# Helpers
+# =====================
+
+def load_image_base64(path: str) -> str:
+    """Lit une image et renvoie une string base64 prête pour un tag <img>."""
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+# =====================
 # Configuration générale
 # =====================
 
@@ -34,52 +45,62 @@ st.set_page_config(
     layout="centered",
 )
 
-# Détection du thème Streamlit pour choisir le bon logo
-theme_base = st.get_option("theme.backgroundColor") or "#ffffff"
-if theme_base == "#ffffff":
-    logo_path = "blacklogo.png"
-else:
-    logo_path = "whitelogo.png"
+# Charger les deux versions du logo
+black_logo_b64 = load_image_base64("blacklogo.png")
+white_logo_b64 = load_image_base64("whitelogo.png")
 
-# Affichage du logo centré
-col_logo_left, col_logo_center, col_logo_right = st.columns([1, 2, 1])
-with col_logo_center:
-    st.image(logo_path, use_column_width=False)
-
-# Petit style global
+# CSS global (logo, titres, cards, footer)
 st.markdown(
-    """
+    f"""
     <style>
-    .main-title {
+    .logo-wrapper {{
+        text-align: center;
+        margin-bottom: 1.2rem;
+    }}
+    .logo-img {{
+        width: 180px;
+    }}
+    .logo-light {{ display: inline-block; }}
+    .logo-dark {{ display: none; }}
+
+    /* Mode clair explicite */
+    body[data-theme="light"] .logo-light {{ display: inline-block; }}
+    body[data-theme="light"] .logo-dark {{ display: none; }}
+
+    /* Mode sombre explicite */
+    body[data-theme="dark"] .logo-light {{ display: none; }}
+    body[data-theme="dark"] .logo-dark {{ display: inline-block; }}
+
+    .main-title {{
         font-size: 2.2rem;
         font-weight: 700;
         margin-bottom: 0.25rem;
         text-align: center;
-    }
-    .subtitle {
+    }}
+    .subtitle {{
         font-size: 0.98rem;
         color: #BBBBBB;
         margin-bottom: 1.5rem;
         text-align: center;
-    }
-    .section-card {
+    }}
+    .section-card {{
         border-radius: 0.75rem;
         padding: 1.2rem 1.3rem;
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    .metric-title {
+    }}
+    .metric-title {{
         font-size: 0.85rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: #999999;
         margin-bottom: 0.2rem;
-    }
-    .metric-value {
+    }}
+    .metric-value {{
         font-size: 1.25rem;
         font-weight: 600;
-    }
-    .footer {
+    }}
+    .footer {{
         position: fixed;
         left: 0;
         bottom: 0;
@@ -89,8 +110,13 @@ st.markdown(
         font-size: 0.85rem;
         color: #888888;
         background: transparent;
-    }
+    }}
     </style>
+
+    <div class="logo-wrapper">
+        <img src="data:image/png;base64,{black_logo_b64}" class="logo-img logo-light" />
+        <img src="data:image/png;base64,{white_logo_b64}" class="logo-img logo-dark" />
+    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -230,7 +256,6 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                # Proba déjà ouvert aujourd’hui
                 if today in forecast_df["date"].values:
                     prob_today = float(
                         forecast_df.loc[forecast_df["date"] == today, "prob_open_cum"].iloc[0]
