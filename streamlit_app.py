@@ -26,18 +26,31 @@ MODEL_VERSION = 1  # incrémente si tu changes la structure des stats
 
 
 # =====================
-# Helpers
+# Configuration générale
 # =====================
 
-import base64
+# IMPORTANT : set_page_config doit être le premier appel Streamlit
+st.set_page_config(
+    page_title="MaxCast – Prévision TGVmax",
+    page_icon="icon.png",  # icon.png doit être à côté de streamlit_app.py
+    layout="centered",
+)
 
-def load_image_b64(path):
+
+# =====================
+# Helpers & logo thème clair/sombre
+# =====================
+
+def load_image_b64(path: str) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-white_logo_b64 = load_image_b64("whitelogo.png")
-black_logo_b64 = load_image_b64("blacklogo.png")
 
+# Ces deux fichiers doivent être à côté de streamlit_app.py
+white_logo_b64 = load_image_b64("whitelogo.png")  # pour dark mode
+black_logo_b64 = load_image_b64("blacklogo.png")  # pour light mode
+
+# Logo + CSS theme-aware avec prefers-color-scheme
 st.markdown(
     f"""
     <style>
@@ -55,42 +68,6 @@ st.markdown(
     @media (prefers-color-scheme: dark) {{
         .logo-dark {{ display: inline-block; }}
         .logo-light {{ display: none; }}
-    }}
-    </style>
-
-    <div class="logo-container">
-        <img class="logo-light" src="data:image/png;base64,{black_logo_b64}" width="170">
-        <img class="logo-dark" src="data:image/png;base64,{white_logo_b64}" width="170">
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-# =====================
-# Configuration générale
-# =====================
-
-st.set_page_config(
-    page_title="MaxCast – Prévision TGVmax",
-    page_icon="icon.png",
-    layout="centered",
-)
-
-# Logo centré
-col_l, col_c, col_r = st.columns([1, 2, 1])
-with col_c:
-    st.image(logo_file, use_column_width=False)
-
-
-# CSS global (logo, titres, cards, footer)
-st.markdown(
-    f"""
-    <style>
-    .logo-wrapper {{
-        text-align: center;
-        margin-bottom: 1.2rem;
-    }}
-    .logo-img {{
-        width: 180px;
     }}
 
     .main-title {{
@@ -135,6 +112,10 @@ st.markdown(
     }}
     </style>
 
+    <div class="logo-container">
+        <img class="logo-light" src="data:image/png;base64,{black_logo_b64}" width="170">
+        <img class="logo-dark" src="data:image/png;base64,{white_logo_b64}" width="170">
+    </div>
     """,
     unsafe_allow_html=True,
 )
