@@ -41,9 +41,22 @@ def load_image_base64(path: str) -> str:
 
 st.set_page_config(
     page_title="MaxCast – Prévision TGVmax",
-    page_icon="🚄",
+    page_icon="icon.png",
     layout="centered",
 )
+
+# Choix du logo en fonction du thème de l'APP (config Streamlit)
+app_theme = st.get_option("theme.base") or "dark"  # "light" ou "dark"
+
+if app_theme == "dark":
+    logo_file = "whitelogo.png"
+else:
+    logo_file = "blacklogo.png"
+
+# Logo centré
+col_l, col_c, col_r = st.columns([1, 2, 1])
+with col_c:
+    st.image(logo_file, use_column_width=False)
 
 # Charger les deux versions du logo
 black_logo_b64 = load_image_base64("blacklogo.png")
