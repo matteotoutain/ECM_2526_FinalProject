@@ -275,3 +275,37 @@ else:
 
             except Exception as e:
                 st.error(f"Erreur lors du calcul : {e}")
+
+# ======================================================
+# Footer
+# ======================================================
+
+footer_css = """
+<style>
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #888888;
+}
+
+.footer a {
+    color: #cccccc;
+    text-decoration: none;
+    font-weight: 600;
+}
+</style>
+"""
+
+footer_html = """
+<div class="footer">
+    Made with ❤️ in <strong>Centrale Méditerranée</strong>
+</div>
+"""
+
+st.markdown(footer_css, unsafe_allow_html=True)
+st.markdown(footer_html, unsafe_allow_html=True)
