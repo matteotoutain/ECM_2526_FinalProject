@@ -1,9 +1,12 @@
 """
 streamlit_app.py
-Version "prod" avec :
-- Logos adaptés au thème clair/sombre
-- Interface peaufinée
-- Stats pré-calculées dans ./precomputed
+
+Version "prod" avec interface utilisateur peaufinée :
+- Utilise uniquement les stats pré-calculées dans ./precomputed.
+- Menus déroulants simples pour Origine / Destination.
+- Aucun trajet sélectionné par défaut.
+- Logo adapté au thème clair/sombre.
+- Footer "Made with ❤️ in Centrale Méditerranée".
 """
 
 import datetime as dt
@@ -18,12 +21,12 @@ from tgvmax_stats_backend import (
     get_most_likely_opening_date,
 )
 
-MODEL_VERSION = 1
+MODEL_VERSION = 1  # incrémente si tu changes la structure des stats
 
 
-# ======================================================
+# =====================
 # Configuration générale
-# ======================================================
+# =====================
 
 st.set_page_config(
     page_title="MaxCast – Prévision TGVmax",
@@ -31,76 +34,80 @@ st.set_page_config(
     layout="centered",
 )
 
-# ---- Détection du thème clair/sombre ----
-theme = st.get_option("theme.base")
-if theme == "dark":
+# Détection du thème Streamlit pour choisir le bon logo
+theme_base = st.get_option("theme.base") or "dark"
+if theme_base == "dark":
     logo_path = "whitelogo.png"
 else:
     logo_path = "blacklogo.png"
 
-# ---- Logo centré ----
-st.markdown(
-    f"""
-    <div style="text-align:center; margin-bottom: 1.2rem;">
-        <img src="data:image/png;base64,{st.image(logo_path, use_column_width=False).image_to_url(logo_path)}" style="width:180px;" />
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# Affichage du logo centré
+col_logo_left, col_logo_center, col_logo_right = st.columns([1, 2, 1])
+with col_logo_center:
+    st.image(logo_path, use_column_width=False)
 
-# ---- Style global ----
+# Petit style global
 st.markdown(
     """
     <style>
     .main-title {
         font-size: 2.2rem;
         font-weight: 700;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.25rem;
         text-align: center;
     }
     .subtitle {
-        font-size: 1rem;
-        text-align: center;
+        font-size: 0.98rem;
         color: #BBBBBB;
         margin-bottom: 1.5rem;
+        text-align: center;
     }
     .section-card {
         border-radius: 0.75rem;
         padding: 1.2rem 1.3rem;
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.06);
-        margin-bottom: 1rem;
     }
     .metric-title {
         font-size: 0.85rem;
-        color: #999999;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        margin-bottom: 0.1rem;
+        color: #999999;
+        margin-bottom: 0.2rem;
     }
     .metric-value {
-        font-size: 1.35rem;
+        font-size: 1.25rem;
         font-weight: 600;
+    }
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        padding: 8px 0 10px 0;
+        text-align: center;
+        font-size: 0.85rem;
+        color: #888888;
+        background: transparent;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ---- Titre ----
 st.markdown('<div class="main-title">MaxCast – Prévision TGVmax</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="subtitle">'
     "Estime la date la plus probable d’ouverture TGVmax pour ton trajet, "
-    "grâce à une analyse quotidienne des historiques de réservation."
+    "à partir de données historiques issues des snapshots de réservation."
     "</div>",
     unsafe_allow_html=True,
 )
 
 
-# ======================================================
+# =====================
 # Chargement des stats
-# ======================================================
+# =====================
 
 @st.cache_resource
 def get_stats(version: int) -> TgvMaxStats:
@@ -112,16 +119,17 @@ try:
 except Exception as e:
     stats = None
     st.error(
-        "❌ Impossible de charger les statistiques pré-calculées.\n"
-        f"`{e}`"
+        "Impossible de charger les statistiques pré-calculées.\n\n"
+        f"Détail : `{e}`\n\n"
+        "Vérifie que le dossier `precomputed/` contient bien `proba_global.csv`, "
+        "`proba_od.parquet` et `stations.json`."
     )
-
 
 st.markdown("")
 
-# ======================================================
+# =====================
 # Paramètres utilisateur
-# ======================================================
+# =====================
 
 st.markdown("### Paramètres du trajet")
 
@@ -150,8 +158,11 @@ else:
     origin = None if origin_choice == sentinel else origin_choice
     destination = None if destination_choice == sentinel else destination_choice
 
-    if origin == destination and origin is not None:
-        st.warning("La gare de départ et la gare d’arrivée sont identiques 😄")
+    if origin is not None and destination is not None and origin == destination:
+        st.warning(
+            "La gare de départ et la gare d’arrivée sont identiques. "
+            "Le calcul fonctionnera, mais ce n’est probablement pas un trajet réel 😄"
+        )
 
     today = dt.date.today()
     min_date = today + dt.timedelta(days=1)
@@ -163,26 +174,28 @@ else:
         min_value=min_date,
         max_value=max_date,
         format="DD/MM/YYYY",
+        help="Sélectionne la date de circulation souhaitée pour ton TGV.",
     )
 
     st.caption(
         "MaxCast utilise la distribution historique de disponibilité TGVmax "
-        "en fonction du nombre de jours avant le départ pour établir une prévision "
-        "globale ou spécifique au trajet."
+        "en fonction du nombre de jours avant le départ. "
+        "Lorsque c’est possible, la prévision est spécifique à ton trajet "
+        "(origine/destination) ; sinon, le modèle retombe sur une statistique plus globale."
     )
 
-    disabled = origin is None or destination is None
-
-    # ======================================================
+    # =====================
     # Bouton de prédiction
-    # ======================================================
+    # =====================
+
+    disabled = origin is None or destination is None
 
     if st.button("🔮 Lancer la prévision", disabled=disabled):
         if disabled:
             st.error("Merci de sélectionner une **gare de départ** et une **gare d’arrivée**.")
         else:
             try:
-                with st.spinner("Calcul des probabilités…"):
+                with st.spinner("Calcul de la probabilité d’ouverture TGVmax…"):
                     forecast_df = forecast_opening_curve(
                         stats=stats,
                         departure_date=trip_date,
@@ -191,35 +204,39 @@ else:
                         destination=destination,
                     )
 
-                date_ml, prob_ml = get_most_likely_opening_date(forecast_df)
-
-                # ======================================================
+                # =====================
                 # Résultats principaux
-                # ======================================================
-                st.markdown("### Résultats")
+                # =====================
+                st.markdown("### Résultats pour ton trajet")
+
+                date_ml, prob_ml = get_most_likely_opening_date(forecast_df)
 
                 st.markdown('<div class="section-card">', unsafe_allow_html=True)
 
                 st.markdown(
-                    f"**Trajet :** {origin} → {destination} &nbsp;&nbsp;|&nbsp;&nbsp;"
-                    f"**Départ :** {trip_date.strftime('%d/%m/%Y')}"
+                    f"**Trajet analysé :** {origin} → {destination} &nbsp;&nbsp;|&nbsp;&nbsp; "
+                    f"**Date de départ :** {trip_date.strftime('%d/%m/%Y')}"
                 )
 
                 colA, colB, colC = st.columns(3)
 
                 with colA:
-                    st.markdown('<div class="metric-title">Date la plus probable</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<div class="metric-title">Date la plus probable</div>',
+                        unsafe_allow_html=True,
+                    )
                     st.markdown(
                         f'<div class="metric-value">{date_ml.strftime("%d/%m/%Y")}</div>',
                         unsafe_allow_html=True,
                     )
 
+                # Proba déjà ouvert aujourd’hui
                 if today in forecast_df["date"].values:
                     prob_today = float(
                         forecast_df.loc[forecast_df["date"] == today, "prob_open_cum"].iloc[0]
                     )
                 else:
-                    prob_today = 0
+                    prob_today = 0.0
 
                 with colB:
                     st.markdown('<div class="metric-title">Déjà ouvert aujourd’hui</div>', unsafe_allow_html=True)
@@ -239,9 +256,9 @@ else:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-                # ======================================================
+                # =====================
                 # Graphiques
-                # ======================================================
+                # =====================
 
                 st.markdown("### Évolution de la probabilité")
 
@@ -250,8 +267,8 @@ else:
                 st.line_chart(chart_df["Probabilité cumulée d'ouverture (%)"])
 
                 st.caption(
-                    "Cette courbe représente la probabilité que la réservation soit déjà ouverte "
-                    "entre aujourd’hui et la veille du départ."
+                    "La courbe ci-dessus représente la probabilité que la réservation TGVmax "
+                    "soit *déjà ouverte* à chaque date entre aujourd’hui et la veille du départ."
                 )
 
                 with st.expander("Détail jour par jour"):
@@ -274,38 +291,18 @@ else:
                     st.dataframe(df_show, use_container_width=True)
 
             except Exception as e:
-                st.error(f"Erreur lors du calcul : {e}")
+                st.error(f"Erreur lors de la prédiction : {e}")
 
-# ======================================================
+
+# =====================
 # Footer
-# ======================================================
+# =====================
 
-footer_css = """
-<style>
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    padding: 10px 0;
-    text-align: center;
-    font-size: 0.85rem;
-    color: #888888;
-}
-
-.footer a {
-    color: #cccccc;
-    text-decoration: none;
-    font-weight: 600;
-}
-</style>
-"""
-
-footer_html = """
-<div class="footer">
-    Made with ❤️ in <strong>Centrale Méditerranée</strong>
-</div>
-"""
-
-st.markdown(footer_css, unsafe_allow_html=True)
-st.markdown(footer_html, unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="footer">
+        Made with ❤️ in <strong>Centrale Méditerranée</strong>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
