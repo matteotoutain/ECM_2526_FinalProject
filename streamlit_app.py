@@ -206,7 +206,9 @@ else:
         "MaxCast utilise la distribution historique de disponibilité TGVmax "
         "en fonction du nombre de jours avant le départ. "
         "Lorsque c’est possible, la prévision est spécifique à ton trajet "
-        "(origine/destination) ; sinon, le modèle retombe sur une statistique plus globale."
+        "(origine/destination) ; sinon, le modèle retombe sur une statistique plus globale. "
+        "Lorsque les données le permettent, l’état réel du trajet dans le snapshot d’aujourd’hui "
+        "est également pris en compte."
     )
 
     # =====================
@@ -234,6 +236,36 @@ else:
                 # =====================
                 st.markdown("### Résultats pour ton trajet")
 
+                # Récup état "aujourd'hui" si le backend le fournit
+                if "status_today" in forecast_df.columns:
+                    status_today = str(forecast_df["status_today"].iloc[0])
+                else:
+                    status_today = "unknown"
+
+                if "open_today" in forecast_df.columns:
+                    open_today = forecast_df["open_today"].iloc[0]
+                else:
+                    open_today = None
+
+                # Message en haut en fonction de l'état actuel
+                if status_today == "open_today":
+                    st.success(
+                        "🎉 Bonne nouvelle : d’après le snapshot du jour, "
+                        "ce trajet est **déjà disponible** en TGVmax."
+                    )
+                elif status_today == "closed_today":
+                    st.info(
+                        "D’après le snapshot du jour, le trajet est **fermé** en TGVmax. "
+                        "Les probabilités ci-dessous indiquent la chance qu’il s’ouvre "
+                        "dans les prochains jours."
+                    )
+                elif status_today == "no_data_today":
+                    st.warning(
+                        "Aucun train trouvé pour ce trajet dans le snapshot du jour. "
+                        "Les prévisions ci-dessous sont basées uniquement sur l’historique."
+                    )
+                # status "unknown_od" ou autre → pas de message spécifique
+
                 date_ml, prob_ml = get_most_likely_opening_date(forecast_df)
 
                 st.markdown('<div class="section-card">', unsafe_allow_html=True)
@@ -245,6 +277,7 @@ else:
 
                 colA, colB, colC = st.columns(3)
 
+                # --- Col A : date la plus probable
                 with colA:
                     st.markdown(
                         '<div class="metric-title">Date la plus probable</div>',
@@ -255,6 +288,7 @@ else:
                         unsafe_allow_html=True,
                     )
 
+                # --- Col B : état aujourd’hui (réel si dispo, sinon proba)
                 if today in forecast_df["date"].values:
                     prob_today = float(
                         forecast_df.loc[forecast_df["date"] == today, "prob_open_cum"].iloc[0]
@@ -263,16 +297,32 @@ else:
                     prob_today = 0.0
 
                 with colB:
-                    st.markdown('<div class="metric-title">Déjà ouvert aujourd’hui</div>', unsafe_allow_html=True)
                     st.markdown(
-                        f'<div class="metric-value">{prob_today * 100:.1f} %</div>',
+                        '<div class="metric-title">État aujourd’hui</div>',
                         unsafe_allow_html=True,
                     )
 
+                    if open_today is True:
+                        value_text = "✅ Oui (déjà ouvert)"
+                    elif open_today is False:
+                        value_text = "❌ Non (fermé)"
+                    else:
+                        # Fallback : probabilité cumulée estimée
+                        value_text = f"{prob_today * 100:.1f} %"
+
+                    st.markdown(
+                        f'<div class="metric-value">{value_text}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # --- Col C : proba ouvert avant le jour J
                 prob_before_dep = float(forecast_df["prob_open_cum"].iloc[-1])
 
                 with colC:
-                    st.markdown('<div class="metric-title">Ouvert avant le jour J</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<div class="metric-title">Ouvert avant le jour J</div>',
+                        unsafe_allow_html=True,
+                    )
                     st.markdown(
                         f'<div class="metric-value">{prob_before_dep * 100:.1f} %</div>',
                         unsafe_allow_html=True,
@@ -292,7 +342,8 @@ else:
 
                 st.caption(
                     "La courbe ci-dessus représente la probabilité que la réservation TGVmax "
-                    "soit *déjà ouverte* à chaque date entre aujourd’hui et la veille du départ."
+                    "soit *déjà ouverte* à chaque date entre aujourd’hui et la veille du départ. "
+                    "Si le trajet est d’ores et déjà ouvert aujourd’hui, la probabilité vaut 100 % dès maintenant."
                 )
 
                 with st.expander("Détail jour par jour"):
@@ -304,14 +355,19 @@ else:
                     df_show["date"] = pd.to_datetime(df_show["date"]).dt.strftime("%d/%m/%Y")
                     df_show["prob_open"] = (df_show["prob_open"] * 100).round(2)
                     df_show["prob_open_cum"] = (df_show["prob_open_cum"] * 100).round(2)
-                    df_show.rename(
-                        columns={
-                            "date": "Date",
-                            "prob_open": "Proba ouverture ce jour-là (%)",
-                            "prob_open_cum": "Proba ouverture avant ou à cette date (%)",
-                        },
-                        inplace=True,
-                    )
+
+                    # Si les colonnes de statut existent, on les renomme aussi
+                    rename_map = {
+                        "date": "Date",
+                        "prob_open": "Proba ouverture ce jour-là (%)",
+                        "prob_open_cum": "Proba ouverture avant ou à cette date (%)",
+                    }
+                    if "status_today" in df_show.columns:
+                        rename_map["status_today"] = "Statut (snapshot du jour)"
+                    if "open_today" in df_show.columns:
+                        rename_map["open_today"] = "Ouvert aujourd’hui ?"
+
+                    df_show.rename(columns=rename_map, inplace=True)
                     st.dataframe(df_show, use_container_width=True)
 
             except Exception as e:
