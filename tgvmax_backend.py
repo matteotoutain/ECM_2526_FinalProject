@@ -2,9 +2,10 @@
 tgvmax_backend.py
 Backend pour la prévision d'ouverture TGVmax à partir des snapshots journaliers.
 
-Version 2 :
+Version 3 :
 - Ajout des probabilités par trajet (Origine, Destination)
 - Stockage de la liste des gares pour le front
+- Prise en compte de l'état actuel (snapshot du jour) pour un trajet donné
 """
 
 from __future__ import annotations
@@ -104,7 +105,7 @@ def load_all_snapshots(data_dir: str, pattern: str = DEFAULT_PATTERN) -> pd.Data
 def filter_trains_for_model(trains_raw: pd.DataFrame) -> pd.DataFrame:
     """
     Applique les filtres de base :
-      - garde uniquement les entités Nord/Sud (JCNORDSUD, JCSUDNORD)
+      - garde uniquement les entités Nord/Sud (JCNORDSUD, JCSUDNORD, PAPROVENCE)
       - supprime les lignes avec delta_days négatif
       - ajoute les colonnes delta_days et tgvmax_available
     """
@@ -209,6 +210,49 @@ def build_model(data_dir: str) -> TgvMaxModel:
 
 
 # =====================
+# Prise en compte de l'état "aujourd'hui"
+# =====================
+
+def get_today_availability_status(
+    model: TgvMaxModel,
+    departure_date: date,
+    today: date,
+    origin: Optional[str],
+    destination: Optional[str],
+) -> tuple[str, Optional[bool]]:
+    """
+    Regarde dans les snapshots si, pour ce trajet (origine, destination, departure_date),
+    le snapshot du jour (today) indique une dispo TGVmax.
+
+    Retourne :
+      - status_today : "open_today", "closed_today", "no_data_today", "unknown_od"
+      - is_open_today : True / False / None
+    """
+    if origin is None or destination is None:
+        return "unknown_od", None
+
+    df = model.trains
+
+    mask = (
+        (df["departure_date"] == departure_date)
+        & (df["snapshot_date_only"] == today)
+        & (df[COL_ORIGIN] == origin)
+        & (df[COL_DEST] == destination)
+    )
+
+    subset = df[mask]
+
+    if subset.empty:
+        return "no_data_today", None
+
+    is_open = bool(subset["tgvmax_available"].any())
+    if is_open:
+        return "open_today", True
+    else:
+        return "closed_today", False
+
+
+# =====================
 # Fonction de prévision
 # =====================
 
@@ -252,13 +296,20 @@ def forecast_opening_curve(
     """
     Construit la courbe de probabilité d'ouverture entre (today) et (departure_date - 1).
 
-    Utilise si possible la proba par trajet (origine, destination, delta_days),
-    sinon retombe sur la proba globale.
+    Étapes :
+      1. Si possible, on regarde l'état actuel du trajet dans le snapshot d'aujourd'hui :
+         - s'il est déjà ouvert => on renvoie une "courbe" dégénérée avec proba=1 aujourd'hui.
+         - s'il est fermé => on continue avec les stats historiques.
+         - s'il n'y a pas de données => on continue aussi avec les stats historiques.
+      2. Utilise si possible la proba par trajet (origine, destination, delta_days),
+         sinon retombe sur la proba globale.
 
     Retourne un DataFrame avec colonnes :
       - date             : date calendaire
       - prob_open        : proba approx. que la résa "s'ouvre" ce jour-là
       - prob_open_cum    : proba qu'elle soit déjà ouverte à cette date
+      - status_today     : état détecté ("open_today", "closed_today", "no_data_today", "unknown_od")
+      - open_today       : True / False / None
     """
     if today is None:
         today = date.today()
@@ -266,6 +317,29 @@ def forecast_opening_curve(
     if departure_date <= today:
         raise ValueError("La date de départ doit être dans le futur.")
 
+    # 1) État actuel dans le snapshot du jour (si OD fourni)
+    status_today, is_open_today = get_today_availability_status(
+        model=model,
+        departure_date=departure_date,
+        today=today,
+        origin=origin,
+        destination=destination,
+    )
+
+    # Si déjà ouvert aujourd'hui, on ne fait pas de prévision : proba=1, cum=1
+    if is_open_today is True:
+        forecast_df = pd.DataFrame(
+            {
+                "date": [today],
+                "prob_open": [1.0],
+                "prob_open_cum": [1.0],
+                "status_today": [status_today],
+                "open_today": [True],
+            }
+        )
+        return forecast_df
+
+    # 2) Sinon, calcul standard de la courbe à partir de today
     max_delta_known = int(model.proba_by_delta.index.max())
     # Si le départ est très lointain, on commence la courbe à departure_date - max_delta_known.
     start_date = max(today, departure_date - timedelta(days=max_delta_known))
@@ -288,7 +362,7 @@ def forecast_opening_curve(
     # On passe à une interprétation "événement d'ouverture" + cumul.
     prob_open = []
     prob_open_cum = []
-    prob_not_open_yet = 1.0
+    prob_not_open_yet = 1.0  # ici, cohérent avec "fermée" au début
 
     for p in daily_p:
         p_new = p * prob_not_open_yet
@@ -302,12 +376,18 @@ def forecast_opening_curve(
         "prob_open_cum": prob_open_cum,
     })
 
+    # On taggue la courbe avec l'état détecté aujourd'hui (utile pour l'API/front)
+    forecast_df["status_today"] = status_today
+    forecast_df["open_today"] = is_open_today
+
     return forecast_df
 
 
 def get_most_likely_opening_date(forecast_df: pd.DataFrame) -> tuple[date, float]:
     """
     Renvoie (date_ouverte_max, probabilité_ce_jour_là) à partir d'une courbe de forecast.
+    Si le trajet est déjà ouvert aujourd'hui et que la courbe ne contient qu'un point,
+    la date retournée sera la date du jour avec probabilité 1.0.
     """
     idx = forecast_df["prob_open"].idxmax()
     row = forecast_df.loc[idx]
