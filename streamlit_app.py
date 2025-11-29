@@ -236,7 +236,7 @@ else:
                 # =====================
                 st.markdown("### Résultats pour ton trajet")
 
-                # Récup état "aujourd'hui" si le backend le fournit
+                # Récup état "aujourd'hui" et existence OD si le backend les fournit
                 if "status_today" in forecast_df.columns:
                     status_today = str(forecast_df["status_today"].iloc[0])
                 else:
@@ -247,24 +247,41 @@ else:
                 else:
                     open_today = None
 
-                # Message en haut en fonction de l'état actuel
-                if status_today == "open_today":
-                    st.success(
-                        "🎉 Bonne nouvelle : d’après le snapshot du jour, "
-                        "ce trajet est **déjà disponible** en TGVmax."
-                    )
-                elif status_today == "closed_today":
-                    st.info(
-                        "D’après le snapshot du jour, le trajet est **fermé** en TGVmax. "
-                        "Les probabilités ci-dessous indiquent la chance qu’il s’ouvre "
-                        "dans les prochains jours."
-                    )
-                elif status_today == "no_data_today":
+                if "od_exists" in forecast_df.columns:
+                    od_exists = bool(forecast_df["od_exists"].iloc[0])
+                else:
+                    od_exists = True
+
+                # Message en haut en fonction de l'état actuel / existence OD
+                if not od_exists:
                     st.warning(
-                        "Aucun train trouvé pour ce trajet dans le snapshot du jour. "
-                        "Les prévisions ci-dessous sont basées uniquement sur l’historique."
+                        "Le couple de gares sélectionné n’a jamais été observé dans les données TGVmax. "
+                        "Les probabilités affichées ci-dessous sont calculées à partir de statistiques "
+                        "globales et peuvent être moins fiables (trajet possiblement non desservi en direct)."
                     )
-                # status "unknown_od" ou autre → pas de message spécifique
+                else:
+                    if status_today == "open_today":
+                        st.success(
+                            "🎉 Bonne nouvelle : d’après le snapshot du jour, "
+                            "ce trajet est **déjà disponible** en TGVmax."
+                        )
+                    elif status_today == "closed_today":
+                        st.info(
+                            "D’après le snapshot du jour, le trajet est **fermé** en TGVmax. "
+                            "Les probabilités ci-dessous indiquent la chance qu’il s’ouvre "
+                            "dans les prochains jours."
+                        )
+                    elif status_today == "no_data_today":
+                        st.warning(
+                            "Aucun train trouvé pour ce trajet dans le snapshot du jour. "
+                            "Les prévisions ci-dessous sont basées uniquement sur l’historique."
+                        )
+                    elif status_today == "invalid_od":
+                        # Normalement couvert par od_exists == False, mais au cas où :
+                        st.warning(
+                            "Le trajet sélectionné n’apparaît pas dans les données TGVmax. "
+                            "Les probabilités ci-dessous sont très approximatives."
+                        )
 
                 date_ml, prob_ml = get_most_likely_opening_date(forecast_df)
 
@@ -288,7 +305,7 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                # --- Col B : état aujourd’hui (réel si dispo, sinon proba)
+                # --- Col B : état aujourd’hui (réel si dispo, sinon proba / info)
                 if today in forecast_df["date"].values:
                     prob_today = float(
                         forecast_df.loc[forecast_df["date"] == today, "prob_open_cum"].iloc[0]
@@ -302,7 +319,9 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                    if open_today is True:
+                    if not od_exists:
+                        value_text = "— (trajet non observé)"
+                    elif open_today is True:
                         value_text = "✅ Oui (déjà ouvert)"
                     elif open_today is False:
                         value_text = "❌ Non (fermé)"
@@ -356,7 +375,6 @@ else:
                     df_show["prob_open"] = (df_show["prob_open"] * 100).round(2)
                     df_show["prob_open_cum"] = (df_show["prob_open_cum"] * 100).round(2)
 
-                    # Si les colonnes de statut existent, on les renomme aussi
                     rename_map = {
                         "date": "Date",
                         "prob_open": "Proba ouverture ce jour-là (%)",
@@ -366,6 +384,8 @@ else:
                         rename_map["status_today"] = "Statut (snapshot du jour)"
                     if "open_today" in df_show.columns:
                         rename_map["open_today"] = "Ouvert aujourd’hui ?"
+                    if "od_exists" in df_show.columns:
+                        rename_map["od_exists"] = "Trajet observé dans les données ?"
 
                     df_show.rename(columns=rename_map, inplace=True)
                     st.dataframe(df_show, use_container_width=True)
