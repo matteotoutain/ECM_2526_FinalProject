@@ -30,23 +30,3 @@ Le système fonctionne entièrement **offline** et peut être déployé gratuite
 
 ---
 
-## 📁 Structure du projet
-
-```bash
-.
-├── precomputed/
-│   ├── proba_global.csv
-│   ├── proba_od.parquet
-│   ├── stations.json
-│   └── (optionnel) snapshot_today.csv
-│
-├── snapshots/
-│   ├── tgvmax_2025-09-28.csv
-│   ├── tgvmax_2025-09-29.csv
-│   └── ...  (dernier snapshot utilisé automatiquement)
-│
-├── streamlit_app.py
-├── tgvmax_stats_backend.py
-├── tgvmax_backend.py              # backend complet, optionnel
-├── requirements.txt
-└── README.md
