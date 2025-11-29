@@ -1,13 +1,17 @@
 """
 tgvmax_stats_backend.py
 
-Backend léger qui lit uniquement les stats pré-calculées dans ./precomputed
-et, si disponible, un snapshot du jour pour connaître l'état réel du trajet aujourd'hui.
+Backend léger qui lit :
+- les stats pré-calculées dans ./precomputed
+- le dernier snapshot brut dans ./snapshots (fichiers tgvmax_YYYY-MM-DD.csv)
+pour connaître l'état réel du trajet aujourd'hui.
 """
 
 from __future__ import annotations
 
 import json
+import glob
+import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -16,7 +20,13 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+# Dossier des stats pré-calculées
 PRECOMPUTED_DIR = Path("precomputed")
+
+# Dossier des snapshots bruts
+SNAPSHOT_DIR = Path("snapshots")
+
+# Colonnes standard
 COL_ORIGIN = "origine"
 COL_DEST = "destination"
 COL_DATE = "date"
@@ -25,49 +35,95 @@ COL_OD_HAPPY = "od_happy_card"
 
 @dataclass
 class TgvMaxStats:
-    proba_global: pd.DataFrame   # delta_days, proba_open
-    proba_od: pd.DataFrame       # origine, destination, delta_days, proba_open
+    proba_global: pd.DataFrame   # colonnes : delta_days, proba_open
+    proba_od: pd.DataFrame       # colonnes : origine, destination, delta_days, proba_open
     stations: list[str]
     mean_open: float             # moyenne globale d'ouverture
-    snapshot_today: Optional[pd.DataFrame] = None  # snapshot du jour (optionnel)
+    snapshot_today: Optional[pd.DataFrame] = None  # dernier snapshot brut, si dispo
+
+
+# =====================
+# Helpers snapshots
+# =====================
+
+def _extract_snapshot_date_from_path(path: str) -> date:
+    """
+    Extrait une date (date du snapshot) à partir d'un chemin de fichier de type :
+      - tgvmax_YYYY-MM-DD.csv
+      - tgvmax_YYYY-MM-DD_blabla.csv
+
+    Si parsing impossible, retourne date.min (pour que ce fichier soit trié en premier).
+    """
+    name = os.path.basename(path)
+    base = name
+    if base.startswith("tgvmax_"):
+        base = base[len("tgvmax_"):]
+    if base.endswith(".csv"):
+        base = base[:-4]
+    base = base.split("_")[0]
+
+    try:
+        return pd.to_datetime(base).date()
+    except Exception:
+        return date.min
+
+
+def _find_latest_snapshot() -> Optional[Path]:
+    """
+    Cherche le dernier fichier tgvmax_YYYY-MM-DD*.csv dans SNAPSHOT_DIR.
+    Retourne le Path correspondant ou None si aucun snapshot trouvé.
+    """
+    pattern = str(SNAPSHOT_DIR / "tgvmax_*.csv")
+    paths = glob.glob(pattern)
+    if not paths:
+        return None
+
+    paths_sorted = sorted(paths, key=_extract_snapshot_date_from_path)
+    latest = paths_sorted[-1]
+    return Path(latest)
 
 
 def _load_snapshot_today() -> Optional[pd.DataFrame]:
     """
-    Charge un snapshot du jour si disponible dans precomputed/snapshot_today.csv.
+    Charge automatiquement le **dernier snapshot tgvmax_YYYY-MM-DD*.csv**
+    trouvé dans SNAPSHOT_DIR.
 
-    Format attendu (aligné sur les CSV d'origine) :
+    Si aucun snapshot n'est trouvé, retourne None.
+
+    Colonnes attendues dans les CSV :
       - date              : date de circulation du train (YYYY-MM-DD)
-      - origine           : nom/label de la gare d'origine
-      - destination       : nom/label de la gare de destination
+      - origine           : gare d'origine
+      - destination       : gare d'arrivée
       - od_happy_card     : "OUI" / "NON" (TGVmax dispo ou non)
-      - (optionnel) snapshot_date : date du snapshot ; si absent, on suppose today()
-
-    Si le fichier n'existe pas, retourne None.
+      - (éventuellement d'autres colonnes ignorées ici)
     """
-    snapshot_path = PRECOMPUTED_DIR / "snapshot_today.csv"
-    if not snapshot_path.exists():
+    latest_path = _find_latest_snapshot()
+    if latest_path is None:
         return None
 
-    df = pd.read_csv(snapshot_path, sep=";", dtype=str)
+    df = pd.read_csv(latest_path, sep=";", dtype=str)
 
-    # Normalisation minimale
-    # - departure_date : type date
+    # departure_date : date de circulation du train
     df["departure_date"] = pd.to_datetime(df[COL_DATE]).dt.date
 
-    # - snapshot_date_only : si pas présent, on met la date du jour
-    if "snapshot_date" in df.columns:
-        df["snapshot_date_only"] = pd.to_datetime(df["snapshot_date"]).dt.date
-    else:
-        df["snapshot_date_only"] = date.today()
+    # snapshot_date_only : date du snapshot dérivée du nom du fichier
+    snap_date = _extract_snapshot_date_from_path(str(latest_path))
+    df["snapshot_date_only"] = snap_date
 
-    # - tgvmax_available : booléen dérivé de od_happy_card
+    # tgvmax_available : booléen sur la dispo TGVmax
     df["tgvmax_available"] = df[COL_OD_HAPPY].str.upper().eq("OUI")
 
     return df
 
 
+# =====================
+# Chargement des stats
+# =====================
+
 def load_stats() -> TgvMaxStats:
+    """
+    Charge les stats pré-calculées et, si possible, le dernier snapshot brut.
+    """
     proba_global = pd.read_csv(PRECOMPUTED_DIR / "proba_global.csv")
     proba_od = pd.read_parquet(PRECOMPUTED_DIR / "proba_od.parquet")
 
@@ -87,15 +143,25 @@ def load_stats() -> TgvMaxStats:
     )
 
 
+# =====================
+# Probabilités journalières (stats pré-calculées)
+# =====================
+
 def _get_daily_probability(
     stats: TgvMaxStats,
     delta: int,
     origin: Optional[str],
     destination: Optional[str],
 ) -> float:
+    """
+    Récupère la proba d'ouverture pour un delta_days donné :
+      - d'abord spécifique au trajet (origine, destination, delta_days)
+      - sinon stat globale proba_global[delta_days]
+      - sinon moyenne globale
+    """
     p = None
 
-    # Proba spécifique OD si disponible
+    # Proba spécifique à l'OD si dispo
     if origin is not None and destination is not None:
         subset = stats.proba_od[
             (stats.proba_od[COL_ORIGIN] == origin)
@@ -117,6 +183,10 @@ def _get_daily_probability(
 
     return max(0.0, min(1.0, p))
 
+
+# =====================
+# État "aujourd'hui" via snapshot brut
+# =====================
 
 def _get_today_availability_status(
     stats: TgvMaxStats,
@@ -159,6 +229,10 @@ def _get_today_availability_status(
         return "closed_today", False
 
 
+# =====================
+# Courbe de prévision
+# =====================
+
 def forecast_opening_curve(
     stats: TgvMaxStats,
     departure_date: date,
@@ -170,8 +244,8 @@ def forecast_opening_curve(
     Construit la courbe de probabilité d'ouverture entre (today) et (departure_date - 1).
 
     - Utilise les stats pré-calculées (proba_global / proba_od) pour les probabilités.
-    - Si un fichier snapshot_today.csv est présent dans ./precomputed, il est utilisé
-      pour déterminer si le trajet est déjà ouvert aujourd'hui.
+    - Utilise, si présent, le dernier snapshot brut pour savoir si le trajet est déjà
+      ouvert aujourd'hui.
 
     Colonnes renvoyées :
       - date             : date calendaire
@@ -195,7 +269,7 @@ def forecast_opening_curve(
     )
 
     # Si déjà ouvert aujourd'hui, on renvoie une "courbe" dégénérée :
-    # un seul point, aujourd'hui, avec proba=1.
+    # un seul point, aujourd'hui, avec proba = 1.
     if is_open_today is True:
         return pd.DataFrame(
             {
@@ -221,7 +295,7 @@ def forecast_opening_curve(
 
     prob_open = []
     prob_open_cum = []
-    # Ici on suppose "fermée" au début, cohérent avec l'interprétation historique
+    # Au début on suppose "non ouvert", cohérent avec l’interprétation historique
     prob_not_open_yet = 1.0
 
     for p in daily_p:
@@ -236,15 +310,21 @@ def forecast_opening_curve(
         "prob_open_cum": prob_open_cum,
     })
 
-    # On ajoute les infos d'état "aujourd'hui" sur toutes les lignes pour que le front
-    # puisse les lire facilement (on dupliquera la même valeur sur chaque ligne).
+    # On ajoute les infos d'état "aujourd'hui" sur toutes les lignes pour le front
     forecast_df["status_today"] = status_today
     forecast_df["open_today"] = is_open_today
 
     return forecast_df
 
 
+# =====================
+# Date la plus probable
+# =====================
+
 def get_most_likely_opening_date(forecast_df: pd.DataFrame) -> tuple[date, float]:
+    """
+    Renvoie (date_ouverte_max, probabilité_ce_jour_là) à partir d'une courbe de forecast.
+    """
     idx = forecast_df["prob_open"].idxmax()
     row = forecast_df.loc[idx]
     return row["date"], float(row["prob_open"])
