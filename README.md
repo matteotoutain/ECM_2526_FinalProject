@@ -1,4 +1,4 @@
-# 📘 MaxCast – Prévision d’ouverture TGVmax
+# MaxCast – Prévision d’ouverture TGVmax
 
 **MaxCast** est un outil de prévision permettant d’estimer **la probabilité d’ouverture TGVmax** pour un trajet donné, à partir :
 
@@ -8,9 +8,7 @@
 
 Le système fonctionne entièrement **offline** et peut être déployé gratuitement via Streamlit Cloud ou Vercel (via Streamlit Server).
 
----
-
-## 🚄 Fonctionnalités principales
+## Fonctionnalités principales
 
 - 🎯 **Prédiction par trajet** (origine → destination)  
   Basée sur les probabilités historiques d’ouverture selon le nombre de jours avant départ.
