@@ -285,7 +285,6 @@ else:
 
                 date_ml, prob_ml = get_most_likely_opening_date(forecast_df)
 
-                st.markdown('<div class="section-card">', unsafe_allow_html=True)
 
                 st.markdown(
                     f"**Trajet analysé :** {origin} → {destination} &nbsp;&nbsp;|&nbsp;&nbsp; "
@@ -347,7 +346,6 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                st.markdown("</div>", unsafe_allow_html=True)
 
                 # =====================
                 # Graphiques
