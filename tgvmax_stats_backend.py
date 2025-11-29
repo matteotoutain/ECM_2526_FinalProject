@@ -3,7 +3,7 @@ tgvmax_stats_backend.py
 
 Backend léger qui lit :
 - les stats pré-calculées dans ./precomputed
-- le dernier snapshot brut dans ./snapshots (fichiers tgvmax_YYYY-MM-DD.csv)
+- le dernier snapshot brut dans ./snapshots (fichiers tgvmax_YYYY-MM-DD*.csv)
 pour connaître l'état réel du trajet aujourd'hui.
 """
 
@@ -144,8 +144,44 @@ def load_stats() -> TgvMaxStats:
 
 
 # =====================
-# Probabilités journalières (stats pré-calculées)
+# Helpers OD / probabilités
 # =====================
+
+def _od_exists_in_data(
+    stats: TgvMaxStats,
+    origin: Optional[str],
+    destination: Optional[str],
+) -> bool:
+    """
+    Indique si le couple (origine, destination) existe dans les données :
+      - soit dans les stats pré-calculées (proba_od)
+      - soit dans le dernier snapshot brut (snapshot_today)
+
+    Retourne True si au moins un train a été vu pour cet OD, False sinon.
+    """
+    if origin is None or destination is None:
+        return False
+
+    # 1) présence dans les stats pré-calculées
+    subset_stats = stats.proba_od[
+        (stats.proba_od[COL_ORIGIN] == origin)
+        & (stats.proba_od[COL_DEST] == destination)
+    ]
+    if not subset_stats.empty:
+        return True
+
+    # 2) présence dans le snapshot brut le plus récent
+    if stats.snapshot_today is not None:
+        df = stats.snapshot_today
+        subset_snap = df[
+            (df[COL_ORIGIN] == origin)
+            & (df[COL_DEST] == destination)
+        ]
+        if not subset_snap.empty:
+            return True
+
+    return False
+
 
 def _get_daily_probability(
     stats: TgvMaxStats,
@@ -199,11 +235,16 @@ def _get_today_availability_status(
     Utilise snapshot_today (si fourni) pour savoir si le trajet est déjà ouvert aujourd'hui.
 
     Retourne :
-      - status_today : "open_today", "closed_today", "no_data_today", "unknown_od"
+      - status_today : "open_today", "closed_today", "no_data_today",
+                       "invalid_od", "unknown_od"
       - is_open_today : True / False / None
     """
     if origin is None or destination is None:
         return "unknown_od", None
+
+    # OD jamais vu dans les données
+    if not _od_exists_in_data(stats, origin, destination):
+        return "invalid_od", None
 
     if stats.snapshot_today is None:
         return "no_data_today", None
@@ -251,13 +292,18 @@ def forecast_opening_curve(
       - date             : date calendaire
       - prob_open        : proba approx. que la résa "s'ouvre" ce jour-là
       - prob_open_cum    : proba qu'elle soit déjà ouverte à cette date
-      - status_today     : "open_today", "closed_today", "no_data_today", "unknown_od"
+      - status_today     : "open_today", "closed_today", "no_data_today",
+                           "invalid_od", "unknown_od"
       - open_today       : True / False / None
+      - od_exists        : True / False
     """
     if today is None:
         today = date.today()
     if departure_date <= today:
         raise ValueError("La date de départ doit être dans le futur.")
+
+    # OD existe-t-il dans les données ?
+    od_exists = _od_exists_in_data(stats, origin, destination)
 
     # 1) État actuel dans le snapshot du jour (si existant)
     status_today, is_open_today = _get_today_availability_status(
@@ -278,6 +324,7 @@ def forecast_opening_curve(
                 "prob_open_cum": [1.0],
                 "status_today": [status_today],
                 "open_today": [True],
+                "od_exists": [od_exists],
             }
         )
 
@@ -310,9 +357,10 @@ def forecast_opening_curve(
         "prob_open_cum": prob_open_cum,
     })
 
-    # On ajoute les infos d'état "aujourd'hui" sur toutes les lignes pour le front
+    # On ajoute les infos d'état "aujourd'hui" et d'existence de l'OD
     forecast_df["status_today"] = status_today
     forecast_df["open_today"] = is_open_today
+    forecast_df["od_exists"] = od_exists
 
     return forecast_df
 
