@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2025-12-01T04:12:08.894691Z",
-  "n_rows_raw": 21943609,
-  "n_rows_enriched": 1262641,
+  "generated_at_utc": "2025-12-02T03:53:57.961127Z",
+  "n_rows_raw": 22333220,
+  "n_rows_enriched": 1284391,
   "n_stations": 30,
   "n_rows_proba_global": 31,
-  "n_rows_proba_od": 11585
+  "n_rows_proba_od": 11697
 }
