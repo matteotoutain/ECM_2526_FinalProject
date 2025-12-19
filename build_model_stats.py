@@ -1,11 +1,7 @@
 """
 build_model_stats.py
 
-Script OFFLINE pour construire les stats TGVmax à partir des snapshots :
-- Probabilité globale par delta_days
-- Probabilité par (origine, destination, delta_days)
-- Liste des gares
-- Snapshot "du jour" (dernier snapshot) agrégé par (date de départ, OD) pour afficher "dispo/pas dispo"
+Script OFFLINE pour construire les stats TGVmax à partir des snapshots.
 
 Sortie dans ./precomputed :
 - proba_global.csv
@@ -15,11 +11,10 @@ Sortie dans ./precomputed :
 - stations.json
 - metadata.json
 
-✅ Modif (compat ML / cohérence backend) :
-- On réutilise les mêmes fonctions de préparation/features que tgvmax_backend.py
-  (filter_trains_for_model + extract_stations) pour garantir que les stats offline
-  sont alignées avec le nouveau backend ML.
-- AUCUNE sortie existante n’est changée (mêmes fichiers, mêmes colonnes).
+✅ Version ML (inspirée du notebook) :
+- entraînement d'un classifieur (XGBoost si dispo, sinon RandomForest)
+- on calcule proba_global et proba_od via les PROBAS PRÉDITES (pas les fréquences)
+- on garde strictement les mêmes fichiers et schémas de sortie
 """
 
 from __future__ import annotations
@@ -33,23 +28,29 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---- IMPORTANT: on s'aligne sur le backend (mêmes filtres / features)
-# Le fichier tgvmax_backend.py doit être présent dans le repo (même dossier ou importable).
-from tgvmax_backend import (
-    filter_trains_for_model,
-    extract_stations as backend_extract_stations,
-)
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+
 
 # Colonnes attendues
 COL_DATE = "date"
+COL_TRAIN_NO = "train_no"
 COL_ENTITY = "entity"
 COL_ORIGIN = "origine"
 COL_DEST = "destination"
+COL_DEP_TIME = "heure_depart"
+COL_ARR_TIME = "heure_arrivee"
 COL_OD_HAPPY = "od_happy_card"
 
 SNAPSHOTS_DIR = Path("snapshots")
 PRECOMPUTED_DIR = Path("precomputed")
 
+
+# ---------------------
+# Helpers snapshots
+# ---------------------
 
 def parse_snapshot_date_from_filename(path: str) -> date | None:
     base = os.path.basename(path)
@@ -113,47 +114,261 @@ def load_all_snapshots() -> pd.DataFrame:
     return pd.concat(dfs, ignore_index=True)
 
 
+# ---------------------
+# Feature engineering (comme notebook)
+# ---------------------
+
 def build_enriched_df(trains_raw: pd.DataFrame) -> pd.DataFrame:
     """
-    IMPORTANT : on délègue au backend (filter_trains_for_model)
-    pour être strictement cohérent avec la version ML du projet.
+    Construit un DF enrichi aligné notebook :
+    - filtre entity Nord/Sud
+    - parse departure_date, departure_datetime, delta_days
+    - cible binaire tgvmax_available
+    - features time : dep_hour, dep_weekday, dep_month, is_weekend
+    - filtre delta_days in [0, 60]
+    - filtre "has_ever_max" (train_no + departure_date a déjà été dispo au moins une fois)
     """
-    return filter_trains_for_model(trains_raw)
+    df = trains_raw.copy()
+
+    # Filtre entités Nord/Sud
+    mask_entity = (
+        df[COL_ENTITY].str.contains("JCNORDSUD", case=False, na=False)
+        | df[COL_ENTITY].str.contains("JCSUDNORD", case=False, na=False)
+        | df[COL_ENTITY].str.contains("PAPROVENCE", case=False, na=False)
+    )
+    df = df[mask_entity].copy()
+
+    # Parse dates
+    df[COL_DATE] = df[COL_DATE].astype(str)
+    df[COL_DEP_TIME] = df.get(COL_DEP_TIME, "").astype(str)
+
+    df["departure_date"] = pd.to_datetime(df[COL_DATE], errors="coerce").dt.date
+    df["snapshot_date_only"] = pd.to_datetime(df["snapshot_date"], errors="coerce").dt.date
+
+    # departure_datetime (robuste)
+    dep_dt_str = df[COL_DATE].astype(str) + " " + df[COL_DEP_TIME].astype(str)
+    df["departure_datetime"] = pd.to_datetime(dep_dt_str, errors="coerce", format=None)
+
+    # delta_days
+    df["delta_days"] = (df["departure_date"] - df["snapshot_date_only"]).apply(
+        lambda d: d.days if pd.notna(d) else np.nan
+    )
+    df = df[df["delta_days"].notna()].copy()
+    df["delta_days"] = df["delta_days"].astype(int)
+
+    # filtre delta >=0
+    df = df[df["delta_days"] >= 0].copy()
+
+    # cible
+    df["tgvmax_available"] = df[COL_OD_HAPPY].astype(str).str.upper().eq("OUI").astype(int)
+
+    # filtre fenêtre delta 0..60 (comme notebook)
+    MIN_D, MAX_D = 0, 60
+    df = df[(df["delta_days"] >= MIN_D) & (df["delta_days"] <= MAX_D)].copy()
+
+    # filtre "has_ever_max" (train_no + departure_date)
+    if COL_TRAIN_NO in df.columns:
+        group_cols = [COL_TRAIN_NO, "departure_date"]
+        has_ever_max = df.groupby(group_cols)["tgvmax_available"].transform("max")
+        df = df[has_ever_max == 1].copy()
+
+    # Features temporelles (si departure_datetime dispo)
+    df["dep_hour"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.hour
+    df["dep_weekday"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.weekday
+    df["dep_month"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.month
+    df["is_weekend"] = df["dep_weekday"].isin([5, 6]).astype(int)
+
+    # Nettoyage OD
+    df[COL_ORIGIN] = df[COL_ORIGIN].astype(str).str.strip()
+    df[COL_DEST] = df[COL_DEST].astype(str).str.strip()
+
+    # On vire les lignes où on ne peut pas faire les features time
+    df = df[df["dep_hour"].notna() & df["dep_weekday"].notna() & df["dep_month"].notna()].copy()
+
+    # Cast num
+    df["dep_hour"] = df["dep_hour"].astype(int)
+    df["dep_weekday"] = df["dep_weekday"].astype(int)
+    df["dep_month"] = df["dep_month"].astype(int)
+
+    return df
 
 
-def compute_probas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def extract_stations(df: pd.DataFrame) -> list[str]:
+    s = pd.concat([df[COL_ORIGIN], df[COL_DEST]], axis=0)
+    stations = (
+        s.dropna()
+        .astype(str)
+        .str.strip()
+        .replace({"": None})
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    return sorted(stations)
+
+
+# ---------------------
+# ML training (comme notebook)
+# ---------------------
+
+def train_classifier(df_enriched: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
+    """
+    Retourne (clf, X_pred_df) :
+    - clf : pipeline sklearn (preprocess + modèle)
+    - X_pred_df : dataframe des features utilisées pour predict
+    """
+    target_col = "tgvmax_available"
+
+    # Colonnes à drop (comme notebook)
+    drop_cols = [
+        "departure_date",
+        "departure_datetime",
+        "arrival_datetime",   # peut ne pas exister
+        COL_DEP_TIME,
+        COL_ARR_TIME,
+        COL_OD_HAPPY,
+    ]
+
+    data_ml = df_enriched.copy()
+    for c in drop_cols:
+        if c in data_ml.columns:
+            data_ml = data_ml.drop(columns=c)
+
+    # On garde snapshot_date dans data_ml éventuellement, mais on l'exclut du modèle
+    if "snapshot_date" not in data_ml.columns:
+        raise ValueError("snapshot_date absent : attendu pour cohérence dataset.")
+
+    X = data_ml.drop(columns=[target_col])
+    y = data_ml[target_col].astype(int).values
+
+    # Définir features num/cat comme notebook
+    numeric_features = []
+    categorical_features = []
+    for col in X.columns:
+        if col == "snapshot_date":
+            continue
+        if pd.api.types.is_numeric_dtype(X[col]):
+            numeric_features.append(col)
+        else:
+            categorical_features.append(col)
+
+    # Retirer snapshot_date si encore là
+    if "snapshot_date" in numeric_features:
+        numeric_features.remove("snapshot_date")
+    if "snapshot_date" in categorical_features:
+        categorical_features.remove("snapshot_date")
+
+    numeric_transformer = Pipeline(steps=[
+        ("scaler", StandardScaler())
+    ])
+    categorical_transformer = Pipeline(steps=[
+        ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ])
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, numeric_features),
+            ("cat", categorical_transformer, categorical_features),
+        ],
+        remainder="drop",
+        sparse_threshold=0.3,
+    )
+
+    # XGBoost si dispo (comme notebook), sinon RF
+    model = None
+    try:
+        from xgboost import XGBClassifier  # type: ignore
+        model = XGBClassifier(
+            n_estimators=200,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=1.0,
+            objective="binary:logistic",
+            eval_metric="logloss",
+            n_jobs=-1,
+            random_state=42,
+        )
+    except Exception:
+        model = RandomForestClassifier(
+            n_estimators=60,
+            max_depth=None,
+            min_samples_leaf=2,
+            n_jobs=-1,
+            random_state=42,
+        )
+
+    clf = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("model", model),
+    ])
+
+    # Fit sur toutes les données (offline → modèle “prod”)
+    X_fit = X.drop(columns=["snapshot_date"]) if "snapshot_date" in X.columns else X
+    clf.fit(X_fit, y)
+
+    return clf, X_fit
+
+
+def compute_probas_from_ml(df_enriched: pd.DataFrame, clf: Pipeline) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Calcule proba_global et proba_od à partir des probabilités PRÉDITES par le modèle.
+    Sorties identiques (colonnes) à l'ancien système.
+    """
+    # Reconstituer X comme train_classifier (sans target, sans drops déjà faits)
+    target_col = "tgvmax_available"
+
+    drop_cols = [
+        "departure_date",
+        "departure_datetime",
+        "arrival_datetime",
+        COL_DEP_TIME,
+        COL_ARR_TIME,
+        COL_OD_HAPPY,
+    ]
+    data_ml = df_enriched.copy()
+    for c in drop_cols:
+        if c in data_ml.columns:
+            data_ml = data_ml.drop(columns=c)
+
+    X = data_ml.drop(columns=[target_col])
+    if "snapshot_date" in X.columns:
+        X = X.drop(columns=["snapshot_date"])
+
+    # Probabilités ML
+    y_proba = clf.predict_proba(X)[:, 1]
+    dfp = df_enriched.copy()
+    dfp["proba_pred"] = y_proba
+
+    # proba_global : mean(proba_pred) par delta
     proba_global = (
-        df.groupby("delta_days")["tgvmax_available"]
+        dfp.groupby("delta_days")["proba_pred"]
         .mean()
         .reset_index()
-        .rename(columns={"tgvmax_available": "proba_open"})
+        .rename(columns={"proba_pred": "proba_open"})
         .sort_values("delta_days")
     )
 
+    # proba_od : mean(proba_pred) par (O, D, delta)
     proba_od = (
-        df.groupby([COL_ORIGIN, COL_DEST, "delta_days"])["tgvmax_available"]
+        dfp.groupby([COL_ORIGIN, COL_DEST, "delta_days"])["proba_pred"]
         .mean()
         .reset_index()
-        .rename(columns={"tgvmax_available": "proba_open"})
+        .rename(columns={"proba_pred": "proba_open"})
         .sort_values([COL_ORIGIN, COL_DEST, "delta_days"])
     )
 
     return proba_global, proba_od
 
 
-def extract_stations(df: pd.DataFrame) -> list[str]:
-    """
-    Aligné backend (strip, drop blanks, etc.)
-    """
-    return backend_extract_stations(df)
-
+# ---------------------
+# Snapshot today OD (inchangé)
+# ---------------------
 
 def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFrame:
     """
-    Construit un tableau pour le bandeau "dispo / pas dispo" sur le dernier snapshot disponible.
-
-    IMPORTANT : on agrège par (departure_date, origin, destination) car "dispo"
-    dépend de la date de départ.
+    Tableau bandeau "dispo/pas dispo" sur le dernier snapshot.
 
     Sortie colonnes :
     - departure_date (YYYY-MM-DD)
@@ -165,13 +380,12 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
 
     snap_od = (
         df_today.groupby(["departure_date", COL_ORIGIN, COL_DEST])["tgvmax_available"]
-        .max()  # dispo si au moins une ligne OD est "OUI"
+        .max()
         .reset_index()
         .rename(columns={"tgvmax_available": "is_open_today"})
         .sort_values(["departure_date", COL_ORIGIN, COL_DEST])
     )
 
-    # Export-friendly (inchangé)
     snap_od["departure_date"] = snap_od["departure_date"].astype(str)
     snap_od["is_open_today"] = snap_od["is_open_today"].astype(int)
     snap_od = snap_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
@@ -181,7 +395,7 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
 def main():
     PRECOMPUTED_DIR.mkdir(exist_ok=True)
 
-    # 1) Détermine le dernier snapshot dispo (pour le bandeau "dispo")
+    # 1) Dernier snapshot dispo (bandeau)
     paths = list_snapshot_paths()
     latest_path, latest_date = get_latest_snapshot_path(paths)
 
@@ -189,17 +403,20 @@ def main():
     raw = load_all_snapshots()
     print(f"{len(raw):,} lignes brutes")
 
-    print("Construction du DataFrame enrichi (aligné tgvmax_backend ML)...")
+    print("Construction du DataFrame enrichi (features notebook)...")
     df = build_enriched_df(raw)
     print(f"{len(df):,} lignes après filtrage / enrichissement")
 
-    print("Calcul des probabilités (stats offline, inchangées)...")
-    proba_global, proba_od = compute_probas(df)
+    print("Entraînement du modèle ML...")
+    clf, _ = train_classifier(df)
+
+    print("Calcul des probabilités (probas PRÉDITES par ML)...")
+    proba_global, proba_od = compute_probas_from_ml(df, clf)
 
     print("Extraction de la liste des gares...")
     stations = extract_stations(df)
 
-    # 2) Snapshot du jour (dernier snapshot)
+    # Snapshot du jour
     print(f"Chargement du dernier snapshot : {os.path.basename(latest_path)}")
     raw_latest = load_snapshot(latest_path)
     snapshot_today_od = build_snapshot_today_od(raw_latest)
@@ -210,14 +427,13 @@ def main():
     # Proba globale
     proba_global.to_csv(PRECOMPUTED_DIR / "proba_global.csv", index=False)
 
-    # Proba OD : parquet (comme avant)
+    # Proba OD
     proba_od.to_parquet(PRECOMPUTED_DIR / "proba_od.parquet", index=False)
 
-    # Proba OD en CSV (pour GitHub Pages)
     proba_od_csv = proba_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
     proba_od_csv.to_csv(PRECOMPUTED_DIR / "proba_od.csv", index=False)
 
-    # Snapshot du jour agrégé OD + departure_date
+    # Snapshot today OD
     snapshot_today_od.to_csv(PRECOMPUTED_DIR / "snapshot_today_od.csv", index=False)
 
     # Stations
