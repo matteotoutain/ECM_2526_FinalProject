@@ -10,10 +10,16 @@ Script OFFLINE pour construire les stats TGVmax à partir des snapshots :
 Sortie dans ./precomputed :
 - proba_global.csv
 - proba_od.parquet
-- proba_od.csv               <-- NEW (pour GitHub Pages)
-- snapshot_today_od.csv      <-- NEW (pour bandeau dispo / pas dispo)
+- proba_od.csv
+- snapshot_today_od.csv
 - stations.json
 - metadata.json
+
+✅ Modif (compat ML / cohérence backend) :
+- On réutilise les mêmes fonctions de préparation/features que tgvmax_backend.py
+  (filter_trains_for_model + extract_stations) pour garantir que les stats offline
+  sont alignées avec le nouveau backend ML.
+- AUCUNE sortie existante n’est changée (mêmes fichiers, mêmes colonnes).
 """
 
 from __future__ import annotations
@@ -26,6 +32,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+# ---- IMPORTANT: on s'aligne sur le backend (mêmes filtres / features)
+# Le fichier tgvmax_backend.py doit être présent dans le repo (même dossier ou importable).
+from tgvmax_backend import (
+    filter_trains_for_model,
+    extract_stations as backend_extract_stations,
+)
 
 # Colonnes attendues
 COL_DATE = "date"
@@ -101,23 +114,11 @@ def load_all_snapshots() -> pd.DataFrame:
 
 
 def build_enriched_df(trains_raw: pd.DataFrame) -> pd.DataFrame:
-    df = trains_raw.copy()
-
-    # Filtre entités Nord/Sud
-    mask_entity = (
-        df[COL_ENTITY].str.contains("JCNORDSUD", case=False, na=False)
-        | df[COL_ENTITY].str.contains("JCSUDNORD", case=False, na=False)
-        | df[COL_ENTITY].str.contains("PAPROVENCE", case=False, na=False)
-    )
-    df = df[mask_entity].copy()
-
-    df["departure_date"] = pd.to_datetime(df[COL_DATE]).dt.date
-    df["snapshot_date_only"] = pd.to_datetime(df["snapshot_date"]).dt.date
-    df["delta_days"] = (df["departure_date"] - df["snapshot_date_only"]).apply(lambda d: d.days)
-
-    df = df[df["delta_days"] >= 0].copy()
-    df["tgvmax_available"] = df[COL_OD_HAPPY].str.upper().eq("OUI")
-    return df
+    """
+    IMPORTANT : on délègue au backend (filter_trains_for_model)
+    pour être strictement cohérent avec la version ML du projet.
+    """
+    return filter_trains_for_model(trains_raw)
 
 
 def compute_probas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -141,17 +142,10 @@ def compute_probas(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def extract_stations(df: pd.DataFrame) -> list[str]:
-    s = pd.concat([df[COL_ORIGIN], df[COL_DEST]], axis=0)
-    stations = (
-        s.dropna()
-        .astype(str)
-        .str.strip()
-        .replace({"": None})
-        .dropna()
-        .unique()
-        .tolist()
-    )
-    return sorted(stations)
+    """
+    Aligné backend (strip, drop blanks, etc.)
+    """
+    return backend_extract_stations(df)
 
 
 def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFrame:
@@ -159,7 +153,7 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
     Construit un tableau pour le bandeau "dispo / pas dispo" sur le dernier snapshot disponible.
 
     IMPORTANT : on agrège par (departure_date, origin, destination) car "dispo"
-    dépend de la date de départ (sinon tu mens au user).
+    dépend de la date de départ.
 
     Sortie colonnes :
     - departure_date (YYYY-MM-DD)
@@ -177,7 +171,7 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
         .sort_values(["departure_date", COL_ORIGIN, COL_DEST])
     )
 
-    # Export-friendly
+    # Export-friendly (inchangé)
     snap_od["departure_date"] = snap_od["departure_date"].astype(str)
     snap_od["is_open_today"] = snap_od["is_open_today"].astype(int)
     snap_od = snap_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
@@ -195,11 +189,11 @@ def main():
     raw = load_all_snapshots()
     print(f"{len(raw):,} lignes brutes")
 
-    print("Construction du DataFrame enrichi...")
+    print("Construction du DataFrame enrichi (aligné tgvmax_backend ML)...")
     df = build_enriched_df(raw)
     print(f"{len(df):,} lignes après filtrage / enrichissement")
 
-    print("Calcul des probabilités...")
+    print("Calcul des probabilités (stats offline, inchangées)...")
     proba_global, proba_od = compute_probas(df)
 
     print("Extraction de la liste des gares...")
@@ -219,19 +213,18 @@ def main():
     # Proba OD : parquet (comme avant)
     proba_od.to_parquet(PRECOMPUTED_DIR / "proba_od.parquet", index=False)
 
-    # NEW: Proba OD en CSV (pour GitHub Pages)
-    # On renomme origine/destination -> origin/destination pour coller au front
+    # Proba OD en CSV (pour GitHub Pages)
     proba_od_csv = proba_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
     proba_od_csv.to_csv(PRECOMPUTED_DIR / "proba_od.csv", index=False)
 
-    # NEW: Snapshot du jour agrégé OD + departure_date
+    # Snapshot du jour agrégé OD + departure_date
     snapshot_today_od.to_csv(PRECOMPUTED_DIR / "snapshot_today_od.csv", index=False)
 
     # Stations
     with open(PRECOMPUTED_DIR / "stations.json", "w", encoding="utf-8") as f:
         json.dump(stations, f, ensure_ascii=False, indent=2)
 
-    # Metadata
+    # Metadata (inchangé)
     metadata = {
         "generated_at_utc": datetime.utcnow().isoformat() + "Z",
         "latest_snapshot_date": str(latest_date),
