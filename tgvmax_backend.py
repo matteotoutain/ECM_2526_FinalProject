@@ -2,10 +2,11 @@
 tgvmax_backend.py
 Backend pour la prévision d'ouverture TGVmax à partir des snapshots journaliers.
 
-Version 3 :
-- Ajout des probabilités par trajet (Origine, Destination)
-- Stockage de la liste des gares pour le front
-- Prise en compte de l'état actuel (snapshot du jour) pour un trajet donné
+Version ML (drop-in, mêmes entrées/sorties) :
+- On conserve EXACTEMENT les mêmes fonctions publiques + mêmes retours
+- On garde proba_by_delta / proba_by_od (compatibilité)
+- On ajoute un vrai modèle supervisé (RandomForest) stocké dans model.trains.attrs
+  -> utilisé en priorité pour estimer P(dispo | origine, destination, delta_days)
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ from typing import Optional, List
 
 import numpy as np
 import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 
 
 # =====================
@@ -33,6 +39,11 @@ COL_DEST = "destination"
 COL_OD_HAPPY = "od_happy_card"  # "OUI" => dispo TGVmax, "NON" sinon
 
 DEFAULT_PATTERN = "tgvmax_*.csv"
+
+# Clés attrs pandas (pour stocker le modèle ML sans casser l'API)
+_ATTR_ML_PIPELINE = "ml_pipeline"
+_ATTR_ML_FEATURES_NUM = "ml_features_num"
+_ATTR_ML_FEATURES_CAT = "ml_features_cat"
 
 
 @dataclass
@@ -120,17 +131,25 @@ def filter_trains_for_model(trains_raw: pd.DataFrame) -> pd.DataFrame:
     df = df[mask_entity].copy()
 
     # Date de départ (à partir de la colonne "date" du CSV)
-    df["departure_date"] = pd.to_datetime(df[COL_DATE]).dt.date
-    df["snapshot_date_only"] = pd.to_datetime(df["snapshot_date"]).dt.date
+    df["departure_date"] = pd.to_datetime(df[COL_DATE], errors="coerce").dt.date
+    df["snapshot_date_only"] = pd.to_datetime(df["snapshot_date"], errors="coerce").dt.date
 
     # delta_days = (date départ) - (date snapshot)
-    df["delta_days"] = (df["departure_date"] - df["snapshot_date_only"]).apply(lambda d: d.days)
+    df["delta_days"] = (df["departure_date"] - df["snapshot_date_only"]).apply(
+        lambda d: d.days if pd.notna(d) else np.nan
+    )
 
     # On garde seulement delta_days >= 0 (pas de snapshot après le départ)
+    df = df[df["delta_days"].notna()].copy()
+    df["delta_days"] = df["delta_days"].astype(int)
     df = df[df["delta_days"] >= 0].copy()
 
     # Variable binaire de dispo TGVmax
-    df["tgvmax_available"] = df[COL_OD_HAPPY].str.upper().eq("OUI")
+    df["tgvmax_available"] = df[COL_OD_HAPPY].astype(str).str.upper().eq("OUI")
+
+    # Nettoyage minimal OD (évite les faux mismatchs)
+    df[COL_ORIGIN] = df[COL_ORIGIN].astype(str).str.strip()
+    df[COL_DEST] = df[COL_DEST].astype(str).str.strip()
 
     return df
 
@@ -182,6 +201,63 @@ def extract_stations(trains: pd.DataFrame) -> List[str]:
 
 
 # =====================
+# ML (supervisé) : entraînement + stockage dans attrs
+# =====================
+
+def _train_ml_pipeline(trains: pd.DataFrame) -> Optional[Pipeline]:
+    """
+    Entraîne un vrai modèle ML supervisé pour approximer :
+        P(tgvmax_available | origine, destination, delta_days)
+
+    Important :
+    - On NE change pas les sorties publiques : on stocke le modèle dans trains.attrs.
+    - On reste léger : RandomForest (inspiré notebook), one-hot sur OD.
+    """
+    needed_cols = {COL_ORIGIN, COL_DEST, "delta_days", "tgvmax_available"}
+    if not needed_cols.issubset(trains.columns):
+        return None
+
+    df = trains[[COL_ORIGIN, COL_DEST, "delta_days", "tgvmax_available"]].dropna().copy()
+    if df.empty:
+        return None
+
+    # On évite les modèles débiles si une seule classe
+    y = df["tgvmax_available"].astype(int).values
+    if len(np.unique(y)) < 2:
+        return None
+
+    X = df[[COL_ORIGIN, COL_DEST, "delta_days"]].copy()
+
+    numeric_features = ["delta_days"]
+    categorical_features = [COL_ORIGIN, COL_DEST]
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", "passthrough", numeric_features),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features),
+        ],
+        remainder="drop",
+        sparse_threshold=0.3,
+    )
+
+    model = RandomForestClassifier(
+        n_estimators=30,
+        max_depth=None,
+        min_samples_leaf=2,
+        n_jobs=-1,
+        random_state=42,
+    )
+
+    clf = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("model", model),
+    ])
+
+    clf.fit(X, y)
+    return clf
+
+
+# =====================
 # Construction du modèle
 # =====================
 
@@ -193,6 +269,7 @@ def build_model(data_dir: str) -> TgvMaxModel:
       3. calcul de la proba globale par delta_days
       4. calcul de la proba par (origine, destination, delta_days)
       5. extraction de la liste de gares
+      6. entraînement d'un modèle ML (stocké dans trains.attrs) utilisé ensuite en priorité
     """
     trains_raw = load_all_snapshots(data_dir=data_dir, pattern=DEFAULT_PATTERN)
     trains = filter_trains_for_model(trains_raw)
@@ -200,6 +277,17 @@ def build_model(data_dir: str) -> TgvMaxModel:
     proba_by_delta = compute_global_proba_by_delta(trains)
     proba_by_od = compute_proba_by_od(trains)
     stations = extract_stations(trains)
+
+    # Entraînement ML (drop-in)
+    ml = _train_ml_pipeline(trains)
+    if ml is not None:
+        trains.attrs[_ATTR_ML_PIPELINE] = ml
+        trains.attrs[_ATTR_ML_FEATURES_NUM] = ["delta_days"]
+        trains.attrs[_ATTR_ML_FEATURES_CAT] = [COL_ORIGIN, COL_DEST]
+    else:
+        trains.attrs[_ATTR_ML_PIPELINE] = None
+        trains.attrs[_ATTR_ML_FEATURES_NUM] = ["delta_days"]
+        trains.attrs[_ATTR_ML_FEATURES_CAT] = [COL_ORIGIN, COL_DEST]
 
     return TgvMaxModel(
         trains=trains,
@@ -256,6 +344,34 @@ def get_today_availability_status(
 # Fonction de prévision
 # =====================
 
+def _predict_proba_ml(
+    model: TgvMaxModel,
+    delta: int,
+    origin: Optional[str],
+    destination: Optional[str],
+) -> Optional[float]:
+    """
+    Renvoie P(dispo) via le modèle ML si dispo, sinon None.
+    """
+    pipe: Optional[Pipeline] = model.trains.attrs.get(_ATTR_ML_PIPELINE, None)
+    if pipe is None:
+        return None
+    if origin is None or destination is None:
+        return None
+
+    X = pd.DataFrame([{
+        COL_ORIGIN: str(origin).strip(),
+        COL_DEST: str(destination).strip(),
+        "delta_days": int(delta),
+    }])
+
+    try:
+        proba = float(pipe.predict_proba(X)[:, 1][0])
+        return max(0.0, min(1.0, proba))
+    except Exception:
+        return None
+
+
 def _get_daily_probability(
     model: TgvMaxModel,
     delta: int,
@@ -264,20 +380,26 @@ def _get_daily_probability(
 ) -> float:
     """
     Récupère la proba pour un (delta_days) donné :
-      - d'abord spécifique au trajet (origine, destination, delta)
-      - sinon fallback sur la proba globale proba_by_delta
-      - sinon 0.0
+      0) d'abord via ML supervisé (si entraîné)
+      1) sinon spécifique au trajet (origine, destination, delta) empirique
+      2) sinon fallback sur la proba globale proba_by_delta
+      3) sinon 0.0
     """
+    # 0) ML
+    p_ml = _predict_proba_ml(model=model, delta=delta, origin=origin, destination=destination)
+    if p_ml is not None:
+        return p_ml
+
     p = None
 
-    # 1) tentative par trajet
+    # 1) tentative par trajet (stats)
     if origin is not None and destination is not None:
         try:
             p = float(model.proba_by_od.loc[(origin, destination, delta)])
         except KeyError:
             p = None
 
-    # 2) fallback global
+    # 2) fallback global (stats)
     if p is None:
         p = float(model.proba_by_delta.get(delta, 0.0))
 
@@ -299,10 +421,10 @@ def forecast_opening_curve(
     Étapes :
       1. Si possible, on regarde l'état actuel du trajet dans le snapshot d'aujourd'hui :
          - s'il est déjà ouvert => on renvoie une "courbe" dégénérée avec proba=1 aujourd'hui.
-         - s'il est fermé => on continue avec les stats historiques.
-         - s'il n'y a pas de données => on continue aussi avec les stats historiques.
-      2. Utilise si possible la proba par trajet (origine, destination, delta_days),
-         sinon retombe sur la proba globale.
+         - s'il est fermé => on continue avec les stats historiques / ML.
+         - s'il n'y a pas de données => on continue aussi avec les stats historiques / ML.
+      2. Utilise si possible le ML (OD + delta_days),
+         sinon la proba par trajet, sinon la proba globale.
 
     Retourne un DataFrame avec colonnes :
       - date             : date calendaire
@@ -340,7 +462,7 @@ def forecast_opening_curve(
         return forecast_df
 
     # 2) Sinon, calcul standard de la courbe à partir de today
-    max_delta_known = int(model.proba_by_delta.index.max())
+    max_delta_known = int(model.proba_by_delta.index.max()) if len(model.proba_by_delta.index) else 0
     # Si le départ est très lointain, on commence la courbe à departure_date - max_delta_known.
     start_date = max(today, departure_date - timedelta(days=max_delta_known))
 
@@ -359,10 +481,10 @@ def forecast_opening_curve(
         )
         daily_p.append(p)
 
-    # On passe à une interprétation "événement d'ouverture" + cumul.
+    # Interprétation "événement d'ouverture" + cumul
     prob_open = []
     prob_open_cum = []
-    prob_not_open_yet = 1.0  # ici, cohérent avec "fermée" au début
+    prob_not_open_yet = 1.0
 
     for p in daily_p:
         p_new = p * prob_not_open_yet
@@ -376,7 +498,7 @@ def forecast_opening_curve(
         "prob_open_cum": prob_open_cum,
     })
 
-    # On taggue la courbe avec l'état détecté aujourd'hui (utile pour l'API/front)
+    # Tag état détecté aujourd'hui
     forecast_df["status_today"] = status_today
     forecast_df["open_today"] = is_open_today
 
