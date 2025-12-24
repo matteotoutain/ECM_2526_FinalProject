@@ -15,7 +15,7 @@ BATCH_FILE = PRECOMPUTED_DIR / "batch_entities.txt"
 
 # Paramètres (tu peux aussi les passer en env si tu veux)
 NB_BUCKETS = 20   # plus grand = moins d'entities/jour
-MAX_PER_DAY = 4   # 3-4 comme tu veux
+MAX_PER_DAY = 2   # 3-4 comme tu veux
 
 
 def _latest_snapshot_path() -> Path:
