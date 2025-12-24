@@ -1,12 +1,10 @@
-# scripts/build_proba_od_for_entities.py
+from __future__ import annotations
 import sys
 from pathlib import Path
 
 # Ajoute la racine du repo au PYTHONPATH
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
-
-from __future__ import annotations
 
 from typing import List
 
