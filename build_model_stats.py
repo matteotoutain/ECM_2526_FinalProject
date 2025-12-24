@@ -118,26 +118,18 @@ def load_all_snapshots() -> pd.DataFrame:
 # Feature engineering (comme notebook)
 # ---------------------
 
-def build_enriched_df(trains_raw: pd.DataFrame) -> pd.DataFrame:
+def build_enriched_df(trains_raw: pd.DataFrame, allowed_entities: list[str] | None = None) -> pd.DataFrame:
     """
-    Construit un DF enrichi aligné notebook :
-    - filtre entity Nord/Sud
-    - parse departure_date, departure_datetime, delta_days
-    - cible binaire tgvmax_available
-    - features time : dep_hour, dep_weekday, dep_month, is_weekend
-    - filtre delta_days in [0, 60]
-    - filtre "has_ever_max" (train_no + departure_date a déjà été dispo au moins une fois)
+    Construit un DF enrichi aligné notebook.
+    Si allowed_entities est fourni, on filtre strictement dessus.
     """
     df = trains_raw.copy()
 
-    # Filtre entités Nord/Sud
-    mask_entity = (
-        df[COL_ENTITY].str.contains("JCNORDSUD", case=False, na=False)
-        | df[COL_ENTITY].str.contains("JCSUDNORD", case=False, na=False)
-        | df[COL_ENTITY].str.contains("PAPROVENCE", case=False, na=False)
-        | df[COL_ENTITY].str.contains("PROVENCEPA", case=False, na=False)
-    )
-    df = df[mask_entity].copy()
+    # Filtre entity (batch-friendly)
+    if allowed_entities is not None:
+        allowed = {e.strip() for e in allowed_entities if e and e.strip()}
+        df[COL_ENTITY] = df[COL_ENTITY].astype(str)
+        df = df[df[COL_ENTITY].isin(allowed)].copy()
 
     # Parse dates
     df[COL_DATE] = df[COL_DATE].astype(str)
