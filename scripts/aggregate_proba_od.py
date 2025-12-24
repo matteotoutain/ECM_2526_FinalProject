@@ -30,8 +30,8 @@ def main() -> None:
     out = pd.concat(frames, ignore_index=True)
 
     # Sécurité doublons (OD, delta) -> garder le dernier
-    out = out.drop_duplicates(["origin", "destination", "delta_days"], keep="last")
-    out = out.sort_values(["origin", "destination", "delta_days"])
+    out = out.drop_duplicates(["origine", "destination", "delta_days"], keep="last")
+    out = out.sort_values(["origine", "destination", "delta_days"])
 
     # Écriture
     csv_path = PRECOMPUTED_DIR / "proba_od.csv"
