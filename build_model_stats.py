@@ -38,7 +38,7 @@ from sklearn.ensemble import RandomForestClassifier
 COL_DATE = "date"
 COL_TRAIN_NO = "train_no"
 COL_ENTITY = "entity"
-COL_ORIGIN = "origin"
+COL_ORIGIN = "origine"
 COL_DEST = "destination"
 COL_DEP_TIME = "heure_depart"
 COL_ARR_TIME = "heure_arrivee"
