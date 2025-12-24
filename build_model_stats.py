@@ -365,7 +365,7 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
 
     Sortie colonnes :
     - departure_date (YYYY-MM-DD)
-    - origin
+    - origine
     - destination
     - is_open_today (0/1)
     """
@@ -381,7 +381,7 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
 
     snap_od["departure_date"] = snap_od["departure_date"].astype(str)
     snap_od["is_open_today"] = snap_od["is_open_today"].astype(int)
-    snap_od = snap_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
+    snap_od = snap_od.rename(columns={COL_ORIGIN: "origine", COL_DEST: "destination"})
     return snap_od
 
 
@@ -423,7 +423,7 @@ def main():
     # Proba OD
     proba_od.to_parquet(PRECOMPUTED_DIR / "proba_od.parquet", index=False)
 
-    proba_od_csv = proba_od.rename(columns={COL_ORIGIN: "origin", COL_DEST: "destination"})
+    proba_od_csv = proba_od.rename(columns={COL_ORIGIN: "origine", COL_DEST: "destination"})
     proba_od_csv.to_csv(PRECOMPUTED_DIR / "proba_od.csv", index=False)
 
     # Snapshot today OD
