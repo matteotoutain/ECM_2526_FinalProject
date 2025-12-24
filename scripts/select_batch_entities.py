@@ -60,6 +60,13 @@ def main() -> None:
     bucket_today = d.toordinal() % NB_BUCKETS
 
     entities = _load_known_entities(latest)
+    
+    # Exclure les OUIGO (pas de TGVmax)
+    entities = [
+        e for e in entities
+        if not e.upper().startswith("OUIGO")
+    ]
+    
     selected = [e for e in entities if _stable_hash_mod(e, NB_BUCKETS) == bucket_today]
     selected = sorted(selected)[:MAX_PER_DAY]
 
