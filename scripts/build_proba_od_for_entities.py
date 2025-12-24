@@ -93,7 +93,7 @@ def main() -> None:
             print(f"[{ent}] enriched empty -> skip")
             continue
 
-        clf = bms.train_classifier(df_enriched)
+        clf, _X_fit = bms.train_classifier(df_enriched)   # <-- unpack
         _proba_global, proba_od = bms.compute_probas_from_ml(df_enriched, clf)
 
         out_path = BY_ENTITY_DIR / f"{ent}.csv"
