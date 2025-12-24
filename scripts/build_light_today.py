@@ -11,7 +11,7 @@ SNAPSHOTS_DIR = Path("snapshots")
 PRECOMPUTED_DIR = Path("precomputed")
 
 COL_DATE = "date"
-COL_ORIGIN = "origine"
+COL_ORIGIN = "origin"
 COL_DEST = "destination"
 
 
