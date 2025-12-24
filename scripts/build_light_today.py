@@ -41,8 +41,8 @@ def build_snapshot_today_od(snapshot_path: Path) -> pd.DataFrame:
     out = (
         df.groupby([COL_DATE, COL_ORIGIN, COL_DEST], as_index=False)["is_open_today"]
         .max()
-        .rename(columns={COL_DATE: "departure_date", COL_ORIGIN: "origin", COL_DEST: "destination"})
-        .sort_values(["departure_date", "origin", "destination"])
+        .rename(columns={COL_DATE: "departure_date", COL_ORIGIN: "origine", COL_DEST: "destination"})
+        .sort_values(["departure_date", "origine", "destination"])
     )
     return out
 
