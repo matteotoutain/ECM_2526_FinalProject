@@ -2,13 +2,12 @@ name: Build TGVmax stats
 
 on:
   schedule:
-    - cron: "0 3 * * *"   # tous les jours à 03:00 UTC
-  workflow_dispatch:       # déclenchement manuel possible
+    - cron: "0 3 * * *"
+  workflow_dispatch:
 
 jobs:
   build-stats:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
 
@@ -16,44 +15,42 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build model stats
+      - name: Init legacy by_entity (first time only)
         run: |
-          python build_model_stats.py
+          python scripts/init_legacy_by_entity.py
 
-      - name: Commit and push updated stats
+      - name: Build snapshot_today_od + stations + light metadata
         run: |
-          echo "=== Working directory ==="
-          pwd
-          echo "=== Contenu du repo après build_model_stats ==="
-          ls -R
+          python scripts/build_light_today.py
 
-          echo "=== Git status avant ajout ==="
-          git status
+      - name: Select batch entities
+        run: |
+          python scripts/select_batch_entities.py
 
-          # On s'assure que le dossier existe (au cas où)
-          mkdir -p precomputed
+      - name: Build proba_od for batch entities
+        run: |
+          python scripts/build_proba_od_for_entities.py
 
-          echo "=== Contenu de precomputed ==="
-          ls -l precomputed || echo "precomputed est vide"
+      - name: Aggregate proba_od (csv + parquet)
+        run: |
+          python scripts/aggregate_proba_od.py
 
+      - name: Commit & push precomputed
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # On ajoute tout le dossier, pas seulement precomputed/*
           git add precomputed
-
-          echo "=== Git status après git add ==="
-          git status
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
