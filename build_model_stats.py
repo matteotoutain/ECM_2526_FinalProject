@@ -11,10 +11,13 @@ Sortie dans ./precomputed :
 - stations.json
 - metadata.json
 
-✅ Version ML (inspirée du notebook) :
+✅ Version ML :
 - entraînement d'un classifieur (XGBoost si dispo, sinon RandomForest)
 - on calcule proba_global et proba_od via les PROBAS PRÉDITES (pas les fréquences)
 - on garde strictement les mêmes fichiers et schémas de sortie
+
+✅ Correction métier :
+- 1 train ouvert => journée OD ouverte (cible = day_open)
 """
 
 from __future__ import annotations
@@ -115,12 +118,12 @@ def load_all_snapshots() -> pd.DataFrame:
 
 
 # ---------------------
-# Feature engineering (comme notebook)
+# Feature engineering (niveau train) (comme notebook)
 # ---------------------
 
 def build_enriched_df(trains_raw: pd.DataFrame, allowed_entities: list[str] | None = None) -> pd.DataFrame:
     """
-    Construit un DF enrichi aligné notebook.
+    Construit un DF enrichi aligné notebook (niveau train).
     Si allowed_entities est fourni, on filtre strictement dessus.
     """
     df = trains_raw.copy()
@@ -152,10 +155,10 @@ def build_enriched_df(trains_raw: pd.DataFrame, allowed_entities: list[str] | No
     # filtre delta >=0
     df = df[df["delta_days"] >= 0].copy()
 
-    # cible
+    # cible train-level
     df["tgvmax_available"] = df[COL_OD_HAPPY].astype(str).str.upper().eq("OUI").astype(int)
 
-    # filtre fenêtre delta 0..60 (comme notebook)
+    # filtre fenêtre delta 0..60
     MIN_D, MAX_D = 0, 60
     df = df[(df["delta_days"] >= MIN_D) & (df["delta_days"] <= MAX_D)].copy()
 
@@ -165,7 +168,7 @@ def build_enriched_df(trains_raw: pd.DataFrame, allowed_entities: list[str] | No
         has_ever_max = df.groupby(group_cols)["tgvmax_available"].transform("max")
         df = df[has_ever_max == 1].copy()
 
-    # Features temporelles (si departure_datetime dispo)
+    # Features temporelles train-level (on les gardera uniquement pour filtrer la validité des dates)
     df["dep_hour"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.hour
     df["dep_weekday"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.weekday
     df["dep_month"] = pd.to_datetime(df["departure_datetime"], errors="coerce").dt.month
@@ -176,10 +179,10 @@ def build_enriched_df(trains_raw: pd.DataFrame, allowed_entities: list[str] | No
     df[COL_DEST] = df[COL_DEST].astype(str).str.strip()
 
     # On vire les lignes où on ne peut pas faire les features time
-    df = df[df["dep_hour"].notna() & df["dep_weekday"].notna() & df["dep_month"].notna()].copy()
+    df = df[df["dep_weekday"].notna() & df["dep_month"].notna()].copy()
 
     # Cast num
-    df["dep_hour"] = df["dep_hour"].astype(int)
+    df["dep_hour"] = pd.to_numeric(df["dep_hour"], errors="coerce")
     df["dep_weekday"] = df["dep_weekday"].astype(int)
     df["dep_month"] = df["dep_month"].astype(int)
 
@@ -201,40 +204,60 @@ def extract_stations(df: pd.DataFrame) -> list[str]:
 
 
 # ---------------------
-# ML training (comme notebook)
+# ✅ Agrégation jour-OD : 1 train ouvert => jour ouvert
 # ---------------------
 
-def train_classifier(df_enriched: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
+def build_day_level_df(df_train_enriched: pd.DataFrame) -> pd.DataFrame:
     """
-    Retourne (clf, X_pred_df) :
-    - clf : pipeline sklearn (preprocess + modèle)
-    - X_pred_df : dataframe des features utilisées pour predict
+    Agrège au niveau (snapshot_date, departure_date, entity, origine, destination, delta_days)
+    avec day_open = max(tgvmax_available).
+
+    On reconstruit des features "jour" pertinentes (pas dep_hour, etc.)
     """
-    target_col = "tgvmax_available"
+    group_keys = ["snapshot_date", "departure_date", COL_ENTITY, COL_ORIGIN, COL_DEST, "delta_days"]
 
-    # Colonnes à drop (comme notebook)
-    drop_cols = [
-        "departure_date",
-        "departure_datetime",
-        "arrival_datetime",   # peut ne pas exister
-        COL_DEP_TIME,
-        COL_ARR_TIME,
-        COL_OD_HAPPY,
-    ]
+    day = (
+        df_train_enriched
+        .groupby(group_keys, as_index=False)["tgvmax_available"]
+        .max()
+        .rename(columns={"tgvmax_available": "day_open"})
+    )
 
-    data_ml = df_enriched.copy()
-    for c in drop_cols:
-        if c in data_ml.columns:
-            data_ml = data_ml.drop(columns=c)
+    # Features jour
+    dep_dt = pd.to_datetime(day["departure_date"], errors="coerce")
+    day["dep_weekday"] = dep_dt.dt.weekday
+    day["dep_month"] = dep_dt.dt.month
+    day["is_weekend"] = day["dep_weekday"].isin([5, 6]).astype(int)
 
-    # On garde snapshot_date dans data_ml éventuellement, mais on l'exclut du modèle
+    # casts
+    day["dep_weekday"] = day["dep_weekday"].astype(int)
+    day["dep_month"] = day["dep_month"].astype(int)
+    day["is_weekend"] = day["is_weekend"].astype(int)
+    day["day_open"] = day["day_open"].astype(int)
+
+    return day
+
+
+# ---------------------
+# ML training (sur day_open)
+# ---------------------
+
+def train_classifier(df_day: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
+    """
+    Entraîne sur la cible day_open (jour-OD).
+    """
+    target_col = "day_open"
+
+    data_ml = df_day.copy()
+
+    # on garde snapshot_date en colonne (utile si tu fais un split ailleurs),
+    # mais on ne l'utilise pas dans le modèle.
     if "snapshot_date" not in data_ml.columns:
         raise ValueError("snapshot_date absent : attendu pour cohérence dataset.")
 
     X = data_ml.drop(columns=[target_col])
     y = data_ml[target_col].astype(int).values
 
-    # Définir features num/cat comme notebook
     numeric_features = []
     categorical_features = []
     for col in X.columns:
@@ -245,18 +268,13 @@ def train_classifier(df_enriched: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]
         else:
             categorical_features.append(col)
 
-    # Retirer snapshot_date si encore là
     if "snapshot_date" in numeric_features:
         numeric_features.remove("snapshot_date")
     if "snapshot_date" in categorical_features:
         categorical_features.remove("snapshot_date")
 
-    numeric_transformer = Pipeline(steps=[
-        ("scaler", StandardScaler())
-    ])
-    categorical_transformer = Pipeline(steps=[
-        ("onehot", OneHotEncoder(handle_unknown="ignore"))
-    ])
+    numeric_transformer = Pipeline(steps=[("scaler", StandardScaler())])
+    categorical_transformer = Pipeline(steps=[("onehot", OneHotEncoder(handle_unknown="ignore"))])
 
     preprocessor = ColumnTransformer(
         transformers=[
@@ -267,7 +285,6 @@ def train_classifier(df_enriched: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]
         sparse_threshold=0.3,
     )
 
-    # XGBoost si dispo (comme notebook), sinon RF
     model = None
     try:
         from xgboost import XGBClassifier  # type: ignore
@@ -292,49 +309,30 @@ def train_classifier(df_enriched: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]
             random_state=42,
         )
 
-    clf = Pipeline(steps=[
-        ("preprocessor", preprocessor),
-        ("model", model),
-    ])
+    clf = Pipeline(steps=[("preprocessor", preprocessor), ("model", model)])
 
-    # Fit sur toutes les données (offline → modèle “prod”)
     X_fit = X.drop(columns=["snapshot_date"]) if "snapshot_date" in X.columns else X
     clf.fit(X_fit, y)
 
     return clf, X_fit
 
 
-def compute_probas_from_ml(df_enriched: pd.DataFrame, clf: Pipeline) -> tuple[pd.DataFrame, pd.DataFrame]:
+def compute_probas_from_ml(df_day: pd.DataFrame, clf: Pipeline) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Calcule proba_global et proba_od à partir des probabilités PRÉDITES par le modèle.
+    Calcule proba_global et proba_od à partir des probabilités PRÉDITES (day-level).
     Sorties identiques (colonnes) à l'ancien système.
     """
-    # Reconstituer X comme train_classifier (sans target, sans drops déjà faits)
-    target_col = "tgvmax_available"
+    target_col = "day_open"
 
-    drop_cols = [
-        "departure_date",
-        "departure_datetime",
-        "arrival_datetime",
-        COL_DEP_TIME,
-        COL_ARR_TIME,
-        COL_OD_HAPPY,
-    ]
-    data_ml = df_enriched.copy()
-    for c in drop_cols:
-        if c in data_ml.columns:
-            data_ml = data_ml.drop(columns=c)
-
-    X = data_ml.drop(columns=[target_col])
+    X = df_day.drop(columns=[target_col])
     if "snapshot_date" in X.columns:
         X = X.drop(columns=["snapshot_date"])
 
-    # Probabilités ML
     y_proba = clf.predict_proba(X)[:, 1]
-    dfp = df_enriched.copy()
+
+    dfp = df_day.copy()
     dfp["proba_pred"] = y_proba
 
-    # proba_global : mean(proba_pred) par delta
     proba_global = (
         dfp.groupby("delta_days")["proba_pred"]
         .mean()
@@ -343,7 +341,6 @@ def compute_probas_from_ml(df_enriched: pd.DataFrame, clf: Pipeline) -> tuple[pd
         .sort_values("delta_days")
     )
 
-    # proba_od : mean(proba_pred) par (O, D, delta)
     proba_od = (
         dfp.groupby([COL_ORIGIN, COL_DEST, "delta_days"])["proba_pred"]
         .mean()
@@ -396,18 +393,22 @@ def main():
     raw = load_all_snapshots()
     print(f"{len(raw):,} lignes brutes")
 
-    print("Construction du DataFrame enrichi (features notebook)...")
-    df = build_enriched_df(raw)
-    print(f"{len(df):,} lignes après filtrage / enrichissement")
+    print("Construction du DataFrame enrichi (train-level)...")
+    df_train = build_enriched_df(raw)
+    print(f"{len(df_train):,} lignes après filtrage / enrichissement (train-level)")
 
-    print("Entraînement du modèle ML...")
-    clf, _ = train_classifier(df)
+    print("Agrégation au niveau journée OD (day-level : 1 train => jour ouvert)...")
+    df_day = build_day_level_df(df_train)
+    print(f"{len(df_day):,} lignes (day-level)")
 
-    print("Calcul des probabilités (probas PRÉDITES par ML)...")
-    proba_global, proba_od = compute_probas_from_ml(df, clf)
+    print("Entraînement du modèle ML (day-level)...")
+    clf, _ = train_classifier(df_day)
+
+    print("Calcul des probabilités (probas PRÉDITES par ML, day-level)...")
+    proba_global, proba_od = compute_probas_from_ml(df_day, clf)
 
     print("Extraction de la liste des gares...")
-    stations = extract_stations(df)
+    stations = extract_stations(df_train)
 
     # Snapshot du jour
     print(f"Chargement du dernier snapshot : {os.path.basename(latest_path)}")
@@ -433,13 +434,13 @@ def main():
     with open(PRECOMPUTED_DIR / "stations.json", "w", encoding="utf-8") as f:
         json.dump(stations, f, ensure_ascii=False, indent=2)
 
-    # Metadata (inchangé)
+    # Metadata (mêmes clés)
     metadata = {
         "generated_at_utc": datetime.utcnow().isoformat() + "Z",
         "latest_snapshot_date": str(latest_date),
         "latest_snapshot_file": os.path.basename(latest_path),
         "n_rows_raw": int(len(raw)),
-        "n_rows_enriched": int(len(df)),
+        "n_rows_enriched": int(len(df_train)),
         "n_stations": int(len(stations)),
         "n_rows_proba_global": int(len(proba_global)),
         "n_rows_proba_od": int(len(proba_od)),
