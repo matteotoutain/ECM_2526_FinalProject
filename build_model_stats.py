@@ -237,7 +237,20 @@ def build_day_level_df(df_train_enriched: pd.DataFrame) -> pd.DataFrame:
 
     return day
 
+def ensure_day_level_df(df_any: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compatibilité :
+    - si df contient déjà day_open => OK
+    - si df contient tgvmax_available => on agrège en day-level (day_open)
+    """
+    if "day_open" in df_any.columns:
+        return df_any
 
+    if "tgvmax_available" in df_any.columns:
+        # df_any est train-level enrichi
+        return build_day_level_df(df_any)
+
+    raise ValueError("DF attendu avec 'day_open' ou 'tgvmax_available'.")
 # ---------------------
 # ML training (sur day_open)
 # ---------------------
@@ -245,7 +258,9 @@ def build_day_level_df(df_train_enriched: pd.DataFrame) -> pd.DataFrame:
 def train_classifier(df_day: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
     """
     Entraîne sur la cible day_open (jour-OD).
+    Accepte aussi un DF train-level (tgvmax_available) et l'agrège automatiquement.
     """
+    df_day = ensure_day_level_df(df_day)
     target_col = "day_open"
 
     data_ml = df_day.copy()
@@ -319,9 +334,10 @@ def train_classifier(df_day: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
 
 def compute_probas_from_ml(df_day: pd.DataFrame, clf: Pipeline) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Calcule proba_global et proba_od à partir des probabilités PRÉDITES (day-level).
-    Sorties identiques (colonnes) à l'ancien système.
+    Calcule proba_global et proba_od à partir des probas PRÉDITES (day-level).
+    Accepte aussi un DF train-level (tgvmax_available) et l'agrège automatiquement.
     """
+    df_day = ensure_day_level_df(df_day)
     target_col = "day_open"
 
     X = df_day.drop(columns=[target_col])
