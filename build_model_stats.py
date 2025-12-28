@@ -245,11 +245,8 @@ def ensure_day_level_df(df_any: pd.DataFrame) -> pd.DataFrame:
     """
     if "day_open" in df_any.columns:
         return df_any
-
     if "tgvmax_available" in df_any.columns:
-        # df_any est train-level enrichi
         return build_day_level_df(df_any)
-
     raise ValueError("DF attendu avec 'day_open' ou 'tgvmax_available'.")
 # ---------------------
 # ML training (sur day_open)
