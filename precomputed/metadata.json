@@ -7,6 +7,5 @@
   "n_stations": 327,
   "n_rows_proba_global": 31,
   "n_rows_proba_od": 4433,
-  "n_rows_snapshot_today_od": 117680,
-  "n_rows_first_signal_od": int(len(first_signal_od))
+  "n_rows_snapshot_today_od": 117680
 }
