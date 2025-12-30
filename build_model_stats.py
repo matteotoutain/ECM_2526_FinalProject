@@ -491,7 +491,7 @@ def main():
     stations = extract_stations(df_train)
 
     print("Calcul du 'premier signal' (first_signal_od) ...")
-    first_signal_od = compute_first_signal_od(df)
+    first_signal_od = compute_first_signal_od(df_train)
     print(f"{len(first_signal_od):,} lignes first_signal_od")
 
     # Snapshot du jour
