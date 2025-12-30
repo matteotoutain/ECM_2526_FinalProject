@@ -45,6 +45,14 @@ jobs:
         run: |
           python scripts/aggregate_proba_od.py
 
+      - name: Build first_signal_od for batch entities
+        run: |
+          python scripts/build_first_signal_od_for_entities.py
+
+      - name: Aggregate first_signal_od (csv)
+        run: |
+          python scripts/aggregate_first_signal_od.py
+
       - name: Commit & push precomputed
         run: |
           git config user.name "github-actions[bot]"
