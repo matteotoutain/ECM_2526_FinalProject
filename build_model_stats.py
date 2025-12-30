@@ -395,6 +395,73 @@ def build_snapshot_today_od(latest_snapshot_df_raw: pd.DataFrame) -> pd.DataFram
     return snap_od
 
 
+def compute_first_signal_od(df_enriched: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcule, pour chaque OD, le "premier signal" typique :
+    - pour chaque departure_date + OD : le 1er jour où ça devient dispo (mesuré en delta_days)
+      => c'est le MAX(delta_days) parmi les snapshots où day_open == 1
+    - puis on agrège par OD : médiane, P25, P75, nombre de départs observés
+
+    Sortie colonnes :
+    - origine
+    - destination
+    - first_open_delta_median
+    - first_open_delta_p25
+    - first_open_delta_p75
+    - n_departure_dates
+    """
+    # 1 train ouvert => journée ouverte (au niveau snapshot_date + departure_date + OD)
+    group_keys = ["snapshot_date", "departure_date", COL_ORIGIN, COL_DEST, "delta_days"]
+    data_day = (
+        df_enriched
+        .groupby(group_keys, as_index=False)["tgvmax_available"]
+        .max()
+        .rename(columns={"tgvmax_available": "day_open"})
+    )
+
+    # garder seulement les jours "ouverts"
+    opened = data_day[data_day["day_open"] == 1].copy()
+    if opened.empty:
+        return pd.DataFrame(columns=[
+            "origine", "destination",
+            "first_open_delta_median", "first_open_delta_p25", "first_open_delta_p75",
+            "n_departure_dates"
+        ])
+
+    # 1er signal pour chaque (departure_date, OD) = dispo la plus "tôt" => delta_days max
+    first_per_departure = (
+        opened
+        .groupby(["departure_date", COL_ORIGIN, COL_DEST], as_index=False)["delta_days"]
+        .max()
+        .rename(columns={"delta_days": "first_open_delta"})
+    )
+
+    # Agrégation OD : médiane + quantiles
+    def q25(x): return float(np.quantile(x, 0.25))
+    def q75(x): return float(np.quantile(x, 0.75))
+
+    out = (
+        first_per_departure
+        .groupby([COL_ORIGIN, COL_DEST])["first_open_delta"]
+        .agg(
+            first_open_delta_median="median",
+            first_open_delta_p25=q25,
+            first_open_delta_p75=q75,
+            n_departure_dates="count"
+        )
+        .reset_index()
+        .rename(columns={COL_ORIGIN: "origine", COL_DEST: "destination"})
+    )
+
+    # cast propres
+    out["first_open_delta_median"] = out["first_open_delta_median"].round(0).astype(int)
+    out["first_open_delta_p25"] = out["first_open_delta_p25"].round(0).astype(int)
+    out["first_open_delta_p75"] = out["first_open_delta_p75"].round(0).astype(int)
+    out["n_departure_dates"] = out["n_departure_dates"].astype(int)
+
+    return out.sort_values(["origine", "destination"]).reset_index(drop=True)
+
+
 def main():
     PRECOMPUTED_DIR.mkdir(exist_ok=True)
 
@@ -423,6 +490,10 @@ def main():
     print("Extraction de la liste des gares...")
     stations = extract_stations(df_train)
 
+    print("Calcul du 'premier signal' (first_signal_od) ...")
+    first_signal_od = compute_first_signal_od(df)
+    print(f"{len(first_signal_od):,} lignes first_signal_od")
+
     # Snapshot du jour
     print(f"Chargement du dernier snapshot : {os.path.basename(latest_path)}")
     raw_latest = load_snapshot(latest_path)
@@ -442,6 +513,8 @@ def main():
 
     # Snapshot today OD
     snapshot_today_od.to_csv(PRECOMPUTED_DIR / "snapshot_today_od.csv", index=False)
+
+    first_signal_od.to_csv(PRECOMPUTED_DIR / "first_signal_od.csv", index=False)
 
     # Stations
     with open(PRECOMPUTED_DIR / "stations.json", "w", encoding="utf-8") as f:
