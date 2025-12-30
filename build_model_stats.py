@@ -531,6 +531,7 @@ def main():
         "n_rows_proba_global": int(len(proba_global)),
         "n_rows_proba_od": int(len(proba_od)),
         "n_rows_snapshot_today_od": int(len(snapshot_today_od)),
+        "n_rows_first_signal_od": int(len(first_signal_od)),
     }
     with open(PRECOMPUTED_DIR / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
