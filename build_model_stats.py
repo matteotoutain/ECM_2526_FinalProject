@@ -314,11 +314,10 @@ def train_classifier(df_day: pd.DataFrame) -> tuple[Pipeline, pd.DataFrame]:
         )
     except Exception:
         model = RandomForestClassifier(
-            n_estimators=60,
-            max_depth=None,
-            min_samples_leaf=2,
-            n_jobs=-1,
-            random_state=42,
+        n_estimators=20,
+        max_depth=None,
+        n_jobs=-1,
+        random_state=42
         )
 
     clf = Pipeline(steps=[("preprocessor", preprocessor), ("model", model)])
