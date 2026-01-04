@@ -1,0 +1,5 @@
+origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
+DIJON VILLE,PARIS (intramuros),14,14,29,73
+DOLE VILLE,PARIS (intramuros),14,14,29,73
+FRASNE,PARIS (intramuros),14,12,29,76
+MOUCHARD,PARIS (intramuros),14,5,29,55
