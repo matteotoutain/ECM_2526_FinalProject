@@ -1,0 +1,14 @@
+origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
+PARIS (intramuros),AGDE,1,0,3,5
+PARIS (intramuros),ARGELES SUR MER,1,0,3,5
+PARIS (intramuros),BANYULS SUR MER,1,0,3,5
+PARIS (intramuros),BEZIERS,1,0,3,5
+PARIS (intramuros),CERBERE,1,0,3,5
+PARIS (intramuros),COLLIOURE,1,0,3,5
+PARIS (intramuros),ELNE,1,0,3,5
+PARIS (intramuros),MONTPELLIER SAINT ROCH,1,0,3,5
+PARIS (intramuros),NARBONNE,1,0,3,5
+PARIS (intramuros),NIMES CENTRE,1,0,3,5
+PARIS (intramuros),PERPIGNAN,1,0,3,5
+PARIS (intramuros),PORT VENDRES VILLE,1,0,3,5
+PARIS (intramuros),SETE,1,0,3,5
