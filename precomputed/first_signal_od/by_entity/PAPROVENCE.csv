@@ -1,0 +1,7 @@
+origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
+AIX EN PROVENCE TGV,MARSEILLE ST CHARLES,29,13,29,124
+AVIGNON TGV,AIX EN PROVENCE TGV,29,13,29,124
+AVIGNON TGV,MARSEILLE ST CHARLES,29,13,29,124
+PARIS (intramuros),AIX EN PROVENCE TGV,29,11,29,103
+PARIS (intramuros),AVIGNON TGV,29,11,29,104
+PARIS (intramuros),MARSEILLE ST CHARLES,29,11,29,103
