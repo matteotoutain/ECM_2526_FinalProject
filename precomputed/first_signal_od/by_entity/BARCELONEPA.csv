@@ -1,0 +1,10 @@
+origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
+BEZIERS,PARIS (intramuros),8,3,13,60
+MONTPELLIER SAINT ROCH,PARIS (intramuros),4,0,8,43
+MONTPELLIER SUD DE FRANCE,PARIS (intramuros),8,7,8,2
+NARBONNE,PARIS (intramuros),8,3,13,60
+NIMES CENTRE,PARIS (intramuros),4,0,8,43
+NIMES PONT DU GARD,PARIS (intramuros),8,7,8,2
+PERPIGNAN,PARIS (intramuros),2,0,5,32
+SETE,PARIS (intramuros),4,4,4,1
+VALENCE TGV AUVERGNE RHONE ALPES,PARIS (intramuros),6,0,16,75
