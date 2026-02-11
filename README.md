@@ -4,27 +4,6 @@
 
 - des **snapshots journaliers réels** de disponibilité TGVmax,
 - de **statistiques pré-calculées** basées sur l’historique,
-- et d’une **interface Streamlit** simple et élégante.
 
-Le système fonctionne entièrement **offline** et peut être déployé gratuitement via Streamlit Cloud ou Vercel (via Streamlit Server).
-
-## Fonctionnalités principales
-
-- 🎯 **Prédiction par trajet** (origine → destination)  
-  Basée sur les probabilités historiques d’ouverture selon le nombre de jours avant départ.
-
-- 📊 **Courbe prédictive interactive**  
-  Affiche la probabilité cumulée d’ouverture et l’évolution jour par jour.
-
-- 🔍 **Prise en compte du snapshot du jour**  
-  Si le dernier fichier `tgvmax_YYYY-MM-DD.csv` indique que le trajet est déjà ouvert/fermé :  
-  → le front l’affiche immédiatement avec un message clair.
-
-- ⚡ **Mode ultra-léger**  
-  Le backend statique (`tgvmax_stats_backend.py`) charge uniquement des CSV/Parquet pré-calculés.
-
-- 🎨 **Interface moderne**  
-  Logos adaptatifs clair/sombre, sections stylées, et UX optimisée.
-
----
+Le système fonctionne entièrement **offline**.
 
