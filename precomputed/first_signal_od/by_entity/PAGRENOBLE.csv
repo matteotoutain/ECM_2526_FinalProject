@@ -1,4 +1,4 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-LYON ST EXUPERY TGV.,GRENOBLE,29,11,29,121
-PARIS (intramuros),GRENOBLE,29,11,29,104
-PARIS (intramuros),LYON ST EXUPERY TGV.,29,11,29,107
+LYON ST EXUPERY TGV.,GRENOBLE,29,11,29,150
+PARIS (intramuros),GRENOBLE,29,13,29,128
+PARIS (intramuros),LYON ST EXUPERY TGV.,29,11,29,134
