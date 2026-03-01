@@ -68,6 +68,7 @@ OUIGO_paris centre <> montpellier bis
 OUIGO_paris centre <> nantes
 OUIGO_paris centre <> nice
 OUIGO_paris centre <> pays basque
+OUIGO_paris centre <> perpignan
 OUIGO_paris centre <> strasbourg
 OUIGO_paris centre <> toulouse
 PAARRAS
