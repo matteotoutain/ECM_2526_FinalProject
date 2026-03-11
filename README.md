@@ -12,7 +12,6 @@ L’objectif est simple : **transformer des données brutes en information explo
 
 Les abonnés **TGVmax** peuvent réserver gratuitement des trains, mais **la disponibilité des places varie fortement** selon :
 
-- l’heure
 - le jour de la semaine
 - la gare de départ
 - la gare d’arrivée
@@ -80,7 +79,6 @@ application web de consultation des résultats
 
 ### Matteo Toutain  
 Engineering Student @ Centrale Méditerranée  
-Salesforce Consultant @ SpringFive  
 
 GitHub :  
 https://github.com/matteotoutain
@@ -91,17 +89,19 @@ https://www.linkedin.com/in/matteotoutain/
 ---
 
 ### Hadrien Bardon
+Engineering Student @ Centrale Méditerranée  
 
 GitHub :  
-https://github.com/hadrienbardon
+https://github.com/hadbdb
+
+LinkedIn :  
+https://www.linkedin.com/in/hadrien-bardon/
 
 ---
 
 # Finalité académique
 
-Ce projet a été réalisé dans le cadre du **Master 2 DATA & Machine Learning** de l’École Centrale Méditerranée.
-
-Il constitue un **cas complet de projet data**, couvrant :
+Ce projet constitue un **cas complet de projet data**, couvrant :
 
 - acquisition de données
 - data engineering
