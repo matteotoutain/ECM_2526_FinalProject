@@ -1,4 +1,4 @@
-![MaxCast Logo](logo.png)
+![MaxCast Logo](blacklogo.png)
 # MaxCast
 
 MaxCast est une application de **data science appliquée au transport ferroviaire** qui permet d’estimer la **probabilité d’obtenir une place avec l’abonnement TGVmax** sur un train donné.
