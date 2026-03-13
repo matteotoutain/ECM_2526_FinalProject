@@ -49,6 +49,7 @@ MUNSTUTPA
 NANCYPA
 NANTEBORDO
 NORESTJOU
+OUIGO_lc_paris <> bordeaux
 OUIGO_lc_paris <> nantes nord
 OUIGO_lc_paris <> nantes sud
 OUIGO_lc_paris <> rennes
