@@ -1,8 +1,8 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
 DIJON VILLE,AEROPORT ROISSY CDG 2 TGV,29,29,29,3
-DIJON VILLE,PARIS (intramuros),29,12,29,109
+DIJON VILLE,PARIS (intramuros),14,9,29,124
 DOLE VILLE,AEROPORT ROISSY CDG 2 TGV,29,29,29,3
-DOLE VILLE,PARIS (intramuros),29,12,29,109
+DOLE VILLE,PARIS (intramuros),14,9,29,124
 FRASNE,AEROPORT ROISSY CDG 2 TGV,29,29,29,3
-FRASNE,PARIS (intramuros),14,11,29,114
-MOUCHARD,PARIS (intramuros),14,4,29,60
+FRASNE,PARIS (intramuros),14,5,29,132
+MOUCHARD,PARIS (intramuros),12,2,29,65
