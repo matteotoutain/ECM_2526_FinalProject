@@ -1,5 +1,5 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-PARIS (intramuros),BELFORT MONTBELIARD TGV,29,14,29,149
-PARIS (intramuros),DIJON VILLE,29,14,29,97
+PARIS (intramuros),BELFORT MONTBELIARD TGV,29,14,29,166
+PARIS (intramuros),DIJON VILLE,29,14,29,112
 PARIS (intramuros),MONTBARD,2,2,29,9
-PARIS (intramuros),MULHOUSE VILLE,29,27,29,169
+PARIS (intramuros),MULHOUSE VILLE,29,22,29,187
