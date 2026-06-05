@@ -6,11 +6,13 @@ AZURPA
 AZURPAR
 BARCELONEPA
 BORDONANTE
+BORFRANC
 BOURPA
 BRETAPARIS
 BRIANCONPA
 CERBEREPARIS
 CLERMONTPA
+FRANCBOR
 FRANCMRS
 FRANCPA
 GENEVEMED
@@ -55,6 +57,7 @@ OUIGO_lc_paris <> bordeaux
 OUIGO_lc_paris <> nantes nord
 OUIGO_lc_paris <> nantes sud
 OUIGO_lc_paris <> rennes
+OUIGO_lyon centre <> montpellier bis
 OUIGO_nord <> bordeaux
 OUIGO_nord <> lyon centre
 OUIGO_nord <> marseille
