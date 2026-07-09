@@ -1,12 +1,12 @@
 {
-  "generated_at_utc": "2026-07-08T05:58:29.981010Z",
-  "latest_snapshot_date": "2026-07-07",
-  "latest_snapshot_file": "tgvmax_2026-07-07.csv",
+  "generated_at_utc": "2026-07-09T07:07:19.368055Z",
+  "latest_snapshot_date": "2026-07-08",
+  "latest_snapshot_file": "tgvmax_2026-07-08.csv",
   "n_rows_raw": 30982479,
   "n_rows_enriched": 1632505,
   "n_stations": 342,
   "n_rows_proba_global": 31,
   "n_rows_proba_od": 140529,
-  "n_rows_snapshot_today_od": 122656,
+  "n_rows_snapshot_today_od": 122752,
   "n_rows_first_signal_od": 4007
 }
