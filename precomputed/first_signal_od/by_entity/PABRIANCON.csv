@@ -1,11 +1,11 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-PARIS (intramuros),BRIANCON,26,9,29,89
-PARIS (intramuros),CHORGES,28,9,29,85
-PARIS (intramuros),CREST,29,7,29,79
-PARIS (intramuros),DIE,29,7,29,79
-PARIS (intramuros),EMBRUN,26,9,29,89
-PARIS (intramuros),GAP,26,9,29,89
-PARIS (intramuros),L'ARGENTIERE LES ECRINS,26,9,29,89
-PARIS (intramuros),LUC EN DIOIS,5,1,16,12
-PARIS (intramuros),MONTDAUPHIN GUILLESTRE,26,9,29,89
-PARIS (intramuros),VEYNES DEVOLUY,26,9,29,89
+PARIS (intramuros),BRIANCON,22,6,29,108
+PARIS (intramuros),CHORGES,22,6,29,104
+PARIS (intramuros),CREST,26,5,29,98
+PARIS (intramuros),DIE,26,5,29,98
+PARIS (intramuros),EMBRUN,22,6,29,108
+PARIS (intramuros),GAP,22,6,29,108
+PARIS (intramuros),L'ARGENTIERE LES ECRINS,22,6,29,108
+PARIS (intramuros),LUC EN DIOIS,11,3,29,21
+PARIS (intramuros),MONTDAUPHIN GUILLESTRE,22,6,29,108
+PARIS (intramuros),VEYNES DEVOLUY,22,6,29,108
