@@ -1,17 +1,17 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-AGDE,PARIS (intramuros),14,7,21,50
-ARGELES SUR MER,PARIS (intramuros),14,7,21,50
-BANYULS SUR MER,PARIS (intramuros),14,7,21,50
-BEZIERS,PARIS (intramuros),14,7,21,50
-CERBERE,PARIS (intramuros),14,7,21,50
-COLLIOURE,PARIS (intramuros),14,7,21,50
-ELNE,PARIS (intramuros),14,7,21,50
-LEUCATE LA FRANQUI,PARIS (intramuros),27,20,29,16
-MONTPELLIER SAINT ROCH,PARIS (intramuros),14,7,21,50
-NARBONNE,PARIS (intramuros),14,7,21,50
-NIMES CENTRE,PARIS (intramuros),14,7,21,50
-PERPIGNAN,PARIS (intramuros),14,7,21,50
-PORT LA NOUVELLE,PARIS (intramuros),27,20,29,16
-PORT VENDRES VILLE,PARIS (intramuros),14,7,21,50
-RIVESALTES,PARIS (intramuros),27,20,29,16
-SETE,PARIS (intramuros),14,7,21,50
+AGDE,PARIS (intramuros),11,3,19,66
+ARGELES SUR MER,PARIS (intramuros),11,3,19,66
+BANYULS SUR MER,PARIS (intramuros),11,3,19,66
+BEZIERS,PARIS (intramuros),11,3,19,66
+CERBERE,PARIS (intramuros),11,3,19,66
+COLLIOURE,PARIS (intramuros),11,3,19,66
+ELNE,PARIS (intramuros),11,3,19,66
+LEUCATE LA FRANQUI,PARIS (intramuros),18,2,27,32
+MONTPELLIER SAINT ROCH,PARIS (intramuros),11,3,19,66
+NARBONNE,PARIS (intramuros),11,3,19,66
+NIMES CENTRE,PARIS (intramuros),11,3,19,66
+PERPIGNAN,PARIS (intramuros),11,3,19,66
+PORT LA NOUVELLE,PARIS (intramuros),18,2,27,32
+PORT VENDRES VILLE,PARIS (intramuros),11,3,19,66
+RIVESALTES,PARIS (intramuros),18,2,27,32
+SETE,PARIS (intramuros),11,3,19,66
