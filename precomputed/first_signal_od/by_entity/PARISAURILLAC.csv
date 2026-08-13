@@ -1,5 +1,5 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-PARIS (intramuros),AURILLAC,8,6,29,228
-PARIS (intramuros),BRETENOUX BIARS,8,6,29,228
-PARIS (intramuros),LAROQUEBROU BATIMENT VOYAGEURS,8,6,29,228
-PARIS (intramuros),ST DENIS PRES MARTEL,8,6,29,228
+PARIS (intramuros),AURILLAC,6,4,29,251
+PARIS (intramuros),BRETENOUX BIARS,6,4,29,251
+PARIS (intramuros),LAROQUEBROU BATIMENT VOYAGEURS,6,4,29,251
+PARIS (intramuros),ST DENIS PRES MARTEL,6,4,29,251
