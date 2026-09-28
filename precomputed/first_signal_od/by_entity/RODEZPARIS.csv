@@ -1,16 +1,16 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-ALBI MADELEINE,PARIS (intramuros),9,6,24,10
-ALBI VILLE,PARIS (intramuros),9,6,24,10
-ASSIER,PARIS (intramuros),14,3,29,122
-AUBIN,PARIS (intramuros),12,3,29,129
-CAPDENAC,PARIS (intramuros),12,3,29,129
-CARMAUX,PARIS (intramuros),9,6,24,10
-CRANSAC,PARIS (intramuros),12,3,29,129
-FIGEAC,PARIS (intramuros),12,3,29,129
-GRAMAT,PARIS (intramuros),13,4,30,129
-NAUCELLE,PARIS (intramuros),9,6,24,10
-ROCAMADOUR PADIRAC,PARIS (intramuros),13,4,30,129
-RODEZ,PARIS (intramuros),12,3,29,129
-ST CHRISTOPHE,PARIS (intramuros),12,3,29,129
-ST DENIS PRES MARTEL,PARIS (intramuros),13,4,30,129
-VIVIEZ DECAZEVILLE,PARIS (intramuros),12,3,29,129
+ALBI MADELEINE,PARIS (intramuros),6,2,19,13
+ALBI VILLE,PARIS (intramuros),6,2,19,13
+ASSIER,PARIS (intramuros),7,0,29,146
+AUBIN,PARIS (intramuros),6,0,29,154
+CAPDENAC,PARIS (intramuros),6,0,29,154
+CARMAUX,PARIS (intramuros),6,2,19,13
+CRANSAC,PARIS (intramuros),6,0,29,154
+FIGEAC,PARIS (intramuros),6,0,29,154
+GRAMAT,PARIS (intramuros),7,1,30,154
+NAUCELLE,PARIS (intramuros),6,2,19,13
+ROCAMADOUR PADIRAC,PARIS (intramuros),7,1,30,154
+RODEZ,PARIS (intramuros),6,0,29,154
+ST CHRISTOPHE,PARIS (intramuros),6,0,29,154
+ST DENIS PRES MARTEL,PARIS (intramuros),7,1,30,154
+VIVIEZ DECAZEVILLE,PARIS (intramuros),6,0,29,154
