@@ -1,8 +1,8 @@
 origine,destination,first_open_delta_median,first_open_delta_p25,first_open_delta_p75,n_departure_dates
-ANTIBES,PARIS (intramuros),17,5,29,160
-CANNES,PARIS (intramuros),17,5,29,160
-LES ARCS DRAGUIGNAN,PARIS (intramuros),17,5,29,160
-MARSEILLE BLANCARDE,PARIS (intramuros),17,5,29,160
-NICE VILLE,PARIS (intramuros),17,5,29,160
-ST RAPHAEL VALESCURE,PARIS (intramuros),17,5,29,160
-TOULON,PARIS (intramuros),17,5,29,160
+ANTIBES,PARIS (intramuros),11,4,29,176
+CANNES,PARIS (intramuros),11,4,29,176
+LES ARCS DRAGUIGNAN,PARIS (intramuros),11,4,29,176
+MARSEILLE BLANCARDE,PARIS (intramuros),11,4,29,176
+NICE VILLE,PARIS (intramuros),11,4,29,176
+ST RAPHAEL VALESCURE,PARIS (intramuros),11,4,29,176
+TOULON,PARIS (intramuros),11,4,29,176
