@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-24T13:39:38.102840Z",
+  "generated_at_utc": "2026-11-25T12:34:01.658900Z",
   "latest_snapshot_date": "2026-11-24",
   "latest_snapshot_file": "tgvmax_2026-11-24.csv",
   "n_rows_raw": 30982479,
@@ -7,6 +7,6 @@
   "n_stations": 321,
   "n_rows_proba_global": 31,
   "n_rows_proba_od": 145293,
-  "n_rows_snapshot_today_od": 108328,
+  "n_rows_snapshot_today_od": 108226,
   "n_rows_first_signal_od": 4186
 }
